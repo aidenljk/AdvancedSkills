@@ -1,0 +1,20 @@
+/summon minecraft:bee
+/summon minecraft:zombie
+/locate structure minecraft:village_plains
+/tp @s -416 ~ -944
+/tp @s -416 120 -944
+/tp @s -416 199 -944
+/kill @e[type=!minecraft:player]
+/summon minecraft:zombie
+/gamerule keepInventory
+/gamerule keepInventory true
+/experience add @s 999
+/kill @e[type=!minecraft:player]
+/summon minecraft:zombie
+/askill exp @s 999
+/askill exp @s 9999
+/askill exp @s 99999
+/sum
+/summon minecraft:zombie
+/gamerule keepInventory true
+/summon minecraft:zombie
