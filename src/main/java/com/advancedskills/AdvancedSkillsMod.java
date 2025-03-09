@@ -61,6 +61,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.state.BlockState;
 import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 
 @Mod(AdvancedSkillsMod.MODID)
 public class AdvancedSkillsMod {
@@ -131,7 +134,7 @@ public class AdvancedSkillsMod {
     private static KeyMapping statsKeyMapping;
 
     // 用于客户端访问Mod实例的静态引用
-    private static AdvancedSkillsMod clientInstance;
+    private static AdvancedSkillsMod INSTANCE;
 
     // 元素类型枚举
     public enum ElementType {
@@ -289,23 +292,24 @@ public class AdvancedSkillsMod {
     // 显示统计信息标志
     private static boolean showStatsInfo = false;
 
+    private Minecraft client;
+
     public AdvancedSkillsMod() {
-        LOGGER.info("高级技能 Mod 初始化 - 怪物等级和玩家进度系统");
+        LOGGER.info("初始化高级技能Mod");
+        this.client = Minecraft.getInstance();
         
-        // 保存实例引用以便客户端访问
-        clientInstance = this;
-        
-        // 获取Forge事件总线
+        // 设置实例引用
+        INSTANCE = this;
+
+        // 获取MOD事件总线和Forge事件总线
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
-        
-        // 注册客户端和通用设置事件
-        modEventBus.addListener(this::clientSetup);
-        modEventBus.addListener(this::registerKeyBindings);
-        
-        // 注册事件监听器
         MinecraftForge.EVENT_BUS.register(this);
         
-        LOGGER.info("热键将被注册: G=元素切换, K=技能统计, M=武器专精");
+        // 注册客户端设置和按键绑定监听器
+        modEventBus.addListener(this::clientSetup);
+        MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
+        
+        LOGGER.info("注册热键：切换元素类型(G)，显示统计信息(K)，切换武器专精(L)");
     }
     
     /**
@@ -330,10 +334,7 @@ public class AdvancedSkillsMod {
             // 记录L键和G键的使用情况
             LOGGER.info("==== 按键使用情况 ====");
             for (KeyMapping key : allKeys) {
-                // 特别记录L键和G键的使用
-                if (key.getKey().getValue() == GLFW.GLFW_KEY_L) {
-                    LOGGER.warn("L键(76)已被绑定到: " + key.getName());
-                }
+
                 if (key.getKey().getValue() == GLFW.GLFW_KEY_G) {
                     LOGGER.warn("G键(71)已被绑定到: " + key.getName());
                 }
@@ -513,8 +514,8 @@ public class AdvancedSkillsMod {
             showStatsInfo = !showStatsInfo;
             
             if (showStatsInfo) {
-                // 显示技能统计信息
-                displaySkillStats(player);
+                // 使用UI方式显示技能统计信息
+                updateStatsDisplay(player);
             } else {
                 // 显示隐藏消息
                 player.sendSystemMessage(Component.literal("技能统计信息已隐藏").withStyle(ChatFormatting.GRAY));
@@ -528,91 +529,35 @@ public class AdvancedSkillsMod {
     }
     
     /**
-     * 显示玩家技能统计信息
+     * 更新并显示统计UI
      */
-    private void displaySkillStats(Player player) {
-        if (player == null) return;
+    private void updateStatsDisplay(Player player) {
+        // 只在客户端执行
+        if (!player.level().isClientSide()) {
+            return;
+        }
         
-        AdvancedSkillsMod mod = getInstance();
-        if (mod == null) return;
-        
-        // 获取玩家技能经验和等级
         UUID playerId = player.getUUID();
-        int xp = mod.playerSkillXp.getOrDefault(playerId, 0);
-        int level = mod.calculateLevelFromXp(xp);
-        int nextLevelXp = mod.calculateXpForLevel(level + 1);
-        int currentLevelXp = mod.calculateXpForLevel(level);
-        int xpForNextLevel = nextLevelXp - currentLevelXp;
-        int xpProgress = xp - currentLevelXp;
         
-        // 获取玩家元素类型
-        ElementType elementType = mod.playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+        // 获取玩家数据
+        int playerXp = playerSkillXp.getOrDefault(playerId, 0);
+        int playerLevel = calculateLevelFromXp(playerXp);
+        ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+        WeaponSpecialty specialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
         
-        // 获取玩家武器专精
-        WeaponSpecialty specialty = mod.playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
+        // 获取击杀统计
+        Map<String, Integer> stats = playerKillStats.getOrDefault(playerId, new HashMap<>());
         
-        // 发送技能统计信息
-        player.sendSystemMessage(Component.literal("===== 技能统计信息 =====").withStyle(ChatFormatting.GOLD));
-        player.sendSystemMessage(Component.literal("等级: " + level).withStyle(ChatFormatting.GREEN));
-        player.sendSystemMessage(Component.literal("经验: " + xp + "/" + nextLevelXp + " (" + xpProgress + "/" + xpForNextLevel + ")").withStyle(ChatFormatting.GREEN));
-        player.sendSystemMessage(Component.literal("元素类型: " + elementType.getDisplayName()).withStyle(elementType.getColor()));
-        player.sendSystemMessage(Component.literal("武器专精: " + specialty.getDisplayName()).withStyle(specialty.getColor()));
-        
-        // 显示可用元素
-        if (level >= 10) {
-            player.sendSystemMessage(Component.literal("===== 可用元素 =====").withStyle(ChatFormatting.YELLOW));
-            if (level >= 10) {
-                player.sendSystemMessage(Component.literal("火 (10+)").withStyle(ElementType.FIRE.getColor()));
-            }
-            if (level >= 25) {
-                player.sendSystemMessage(Component.literal("冰 (25+)").withStyle(ElementType.ICE.getColor()));
-            }
-            if (level >= 40) {
-                player.sendSystemMessage(Component.literal("雷 (40+)").withStyle(ElementType.LIGHTNING.getColor()));
-            }
-            if (level >= 55) {
-                player.sendSystemMessage(Component.literal("毒 (55+)").withStyle(ElementType.POISON.getColor()));
-            }
-        }
-        
-        // 显示暴击信息
-        if (level >= 10) {
-            float critChance = BASE_CRIT_CHANCE + (CRIT_CHANCE_PER_LEVEL * level);
-            float critDamage = BASE_CRIT_DAMAGE + (CRIT_DAMAGE_PER_LEVEL * level);
-            
-            // 根据专精调整显示
-            if (specialty == WeaponSpecialty.BOW) {
-                critChance += BOW_SPECIALTY_CRIT_BONUS;
-                critDamage += BOW_SPECIALTY_CRIT_DAMAGE_BONUS;
-            } else if (specialty == WeaponSpecialty.SWORD) {
-                critChance += SWORD_SPECIALTY_CRIT_BONUS;
-                critDamage += SWORD_SPECIALTY_CRIT_DAMAGE_BONUS;
-            }
-            
-            player.sendSystemMessage(Component.literal("===== 暴击属性 =====").withStyle(ChatFormatting.RED));
-            player.sendSystemMessage(Component.literal(String.format("暴击几率: %.1f%%", critChance * 100)).withStyle(ChatFormatting.YELLOW));
-            player.sendSystemMessage(Component.literal(String.format("暴击伤害: x%.2f", critDamage)).withStyle(ChatFormatting.RED));
-        }
-        
-        // 显示击杀统计
-        Map<String, Integer> killStats = mod.playerKillStats.getOrDefault(playerId, new HashMap<>());
-        if (!killStats.isEmpty()) {
-            player.sendSystemMessage(Component.literal("===== 击杀统计 =====").withStyle(ChatFormatting.AQUA));
-            for (String tier : mod.LEVEL_TIERS) {
-                int count = killStats.getOrDefault(tier, 0);
-                if (count > 0) {
-                    player.sendSystemMessage(Component.literal(tier + ": " + count).withStyle(ChatFormatting.WHITE));
-                }
-            }
-        }
-        
-        player.sendSystemMessage(Component.literal("再次按K键隐藏信息").withStyle(ChatFormatting.GRAY));
+        // 创建并显示统计屏幕
+        KillStatsScreen statsScreen = new KillStatsScreen();
+        statsScreen.updateStats(playerLevel, playerXp, stats, elementType, specialty);
+        Minecraft.getInstance().setScreen(statsScreen);
     }
     
     /**
      * 循环切换玩家的元素类型
      */
-    private void cycleElementType(Player player) {
+    public void cycleElementType(Player player) {
         UUID playerId = player.getUUID();
         int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(playerId, 0));
         
@@ -690,7 +635,8 @@ public class AdvancedSkillsMod {
         // 客户端处理
         if (player.level().isClientSide()) {
             if (player == Minecraft.getInstance().player) {
-                clientInstance = this;
+                // 更新实例引用
+                INSTANCE = this;
             }
             return;
         }
@@ -975,13 +921,22 @@ public class AdvancedSkillsMod {
      * 应用元素效果到目标
      */
     private void applyElementalEffect(Player player, LivingEntity target, ElementType elementType, int playerLevel, boolean isRanged) {
+        // 基础安全检查
         if (elementType == ElementType.NONE) return;
-        
-        // 安全检查 - 防止对无效目标应用效果
-        if (target == null || !target.isAlive()) {
-            LOGGER.warn("尝试对无效或已死亡目标应用元素效果");
+        if (player == null || !player.isAlive()) {
+            LOGGER.debug("无法应用元素效果：玩家为null或已死亡");
             return;
         }
+        if (target == null || !target.isAlive()) {
+            LOGGER.debug("无法应用元素效果：目标为null或已死亡");
+            return;
+        }
+        if (target.level() == null || player.level() == null) {
+            LOGGER.debug("无法应用元素效果：目标或玩家所在世界为null");
+            return;
+        }
+        
+        LOGGER.debug("开始应用" + elementType.getDisplayName() + "元素效果 - 玩家等级:" + playerLevel);
         
         try {
             // 根据武器专精可能加强元素效果
@@ -995,192 +950,11 @@ public class AdvancedSkillsMod {
             
             // 应用对应元素效果
             switch (elementType) {
-                case FIRE:
-                    // 火元素：点燃目标，增加伤害
-                    float fireDuration = (FIRE_BASE_DURATION + (FIRE_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
-                    
-                    // 设置实体着火
-                    try {
-                        target.setRemainingFireTicks((int)(fireDuration * 20));
-                    } catch (Exception e) {
-                        LOGGER.error("设置实体着火时出错: " + e.getMessage());
-                    }
-                    
-                    // 额外火焰伤害 - 使用try-catch避免潜在问题
-                    try {
-                        float fireDamage = (FIRE_BASE_DAMAGE + (FIRE_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
-                        if (fireDamage > 0) {
-                            target.hurt(target.damageSources().onFire(), fireDamage);
-                        }
-                        
-                        // 提示玩家(只在伤害明显时)
-                        if (fireDamage >= 3.0f) {
-                            String message = String.format("【火元素】造成 %.1f 额外伤害", fireDamage);
-                            player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.RED));
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("应用火元素伤害时出错: " + e.getMessage());
-                    }
-                    
-                    // 显示效果
-                    spawnElementParticles(target, elementType);
-                    LOGGER.debug("对 " + target.getName().getString() + " 应用火元素效果");
-                    break;
-                    
-                case ICE:
-                    // 冰元素：减速目标，更强的减速效果
-                    try {
-                        float iceDuration = (ICE_BASE_DURATION + (ICE_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
-                        int slowAmplifier = (int)((ICE_BASE_SLOW_AMPLIFIER + (ICE_SLOW_AMPLIFIER_PER_LEVEL * playerLevel)) * elementalBoost);
-                        // 确保最少1级减速效果
-                        slowAmplifier = Math.max(0, Math.min(slowAmplifier, 4)); // 限制最大减速等级为4
-                        
-                        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, (int)(iceDuration * 20), slowAmplifier));
-                        
-                        // 高等级时添加挖掘疲劳效果
-                        if (playerLevel >= 30) {
-                            int fatigueAmplifier = playerLevel >= 60 ? 1 : 0;
-                            target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, (int)(iceDuration * 15), fatigueAmplifier));
-                        }
-                        
-                        // 提示玩家(只在效果明显时)
-                        if (slowAmplifier >= 2) {
-                            String message = String.format("【冰元素】减速 %d 级，持续 %.1f 秒", slowAmplifier + 1, iceDuration);
-                            player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.AQUA));
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("应用冰元素效果时出错: " + e.getMessage());
-                    }
-                    
-                    // 显示效果
-                    spawnElementParticles(target, elementType);
-                    LOGGER.debug("对 " + target.getName().getString() + " 应用冰元素效果");
-                    break;
-                    
-                case LIGHTNING:
-                    // 雷元素：有几率连锁伤害，范围更大
-                    try {
-                        float lightningChance = (LIGHTNING_BASE_CHANCE + (LIGHTNING_CHANCE_PER_LEVEL * playerLevel)) * elementalBoost;
-                        
-                        // 增加伤害几率上限
-                        lightningChance = Math.min(lightningChance, 0.75f);
-                        
-                        if (random.nextFloat() < lightningChance) {
-                            // 寻找范围内其他目标
-                            Level level = target.level();
-                            if (level == null) {
-                                LOGGER.warn("无法获取目标所在的世界Level，无法应用闪电连锁效果");
-                                break;
-                            }
-                            
-                            // 大幅降低搜索半径，防止处理过多实体导致崩溃
-                            float radius = Math.min(3.0f + (playerLevel / 50.0f), 5.0f);
-                            Vec3 targetPos = target.position();
-                            
-                            // 创建搜索范围
-                            AABB searchBox = new AABB(
-                                targetPos.x - radius, 
-                                targetPos.y - radius, 
-                                targetPos.z - radius,
-                                targetPos.x + radius, 
-                                targetPos.y + radius, 
-                                targetPos.z + radius
-                            );
-                            
-                            try {
-                                // 限制检索数量，避免处理过多实体
-                                List<LivingEntity> nearbyEntities = level.getEntitiesOfClass(
-                                    LivingEntity.class, 
-                                    searchBox, 
-                                    e -> e != target && e != player && 
-                                         e.isAlive() &&
-                                         e instanceof Monster // 只对怪物生效
-                                );
-                                
-                                // 严格限制最大连锁数量，降低崩溃风险
-                                int maxChainAllowed = Math.min(playerLevel >= 50 ? 3 : (playerLevel >= 25 ? 2 : 1), 3);
-                                int chainCount = Math.min(nearbyEntities.size(), maxChainAllowed);
-                                
-                                // 如果找到了连锁目标
-                                if (chainCount > 0) {
-                                    // 计算连锁伤害
-                                    float chainDamage = (LIGHTNING_BASE_DAMAGE + (LIGHTNING_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
-                                    int processedCount = 0;
-                                    
-                                    for (int i = 0; i < Math.min(chainCount, nearbyEntities.size()); i++) {
-                                        LivingEntity chainTarget = nearbyEntities.get(i);
-                                        // 检查目标是否有效且活着
-                                        if (chainTarget == null || !chainTarget.isAlive()) {
-                                            continue;
-                                        }
-                                        
-                                        try {
-                                            // 应用伤害
-                                            chainTarget.hurt(chainTarget.damageSources().indirectMagic(player, player), chainDamage);
-                                            
-                                            // 仅显示粒子效果，不生成实际的闪电
-                                            spawnElementParticles(chainTarget, elementType);
-                                            
-                                            // 记录日志
-                                            LOGGER.debug("闪电连锁影响实体: " + chainTarget.getName().getString());
-                                            
-                                            processedCount++;
-                                            if (processedCount >= maxChainAllowed) {
-                                                break; // 达到最大连锁数量，强制退出
-                                            }
-                                        } catch (Exception e) {
-                                            LOGGER.error("处理闪电连锁单个目标时出错: " + e.getMessage());
-                                        }
-                                    }
-                                    
-                                    // 通知玩家
-                                    if (processedCount > 0) {
-                                        String message = String.format("【雷元素】连锁触发！命中 %d 个额外目标", processedCount);
-                                        player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
-                                    }
-                                }
-                            } catch (Exception e) {
-                                LOGGER.error("处理闪电连锁搜索实体时出错: " + e.getMessage(), e);
-                            }
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("处理雷元素效果时出错: " + e.getMessage(), e);
-                    }
-                    
-                    // 无论连锁是否成功，都在原目标显示效果
-                    spawnElementParticles(target, elementType);
-                    LOGGER.debug("对 " + target.getName().getString() + " 应用雷元素效果");
-                    break;
-                    
-                case POISON:
-                    // 毒元素：持续伤害，更高等级和持续时间
-                    try {
-                        float poisonDuration = (POISON_BASE_DURATION + (POISON_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
-                        int poisonAmplifier = (int)((POISON_BASE_AMPLIFIER + (POISON_AMPLIFIER_PER_LEVEL * playerLevel)) * elementalBoost);
-                        
-                        // 确保最低1级毒性，且最高不超过4级
-                        poisonAmplifier = Math.max(0, Math.min(poisonAmplifier, 4));
-                        
-                        target.addEffect(new MobEffectInstance(MobEffects.POISON, (int)(poisonDuration * 20), poisonAmplifier));
-                        
-                        // 高等级时添加虚弱效果
-                        if (playerLevel >= 35) {
-                            int weaknessLevel = playerLevel >= 70 ? 1 : 0; 
-                            target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, (int)(poisonDuration * 15), weaknessLevel));
-                        }
-                        
-                        // 提示玩家(只在效果明显时)
-                        if (poisonAmplifier >= 2 || poisonDuration >= 5.0f) {
-                            String message = String.format("【毒元素】中毒 %d 级，持续 %.1f 秒", poisonAmplifier + 1, poisonDuration);
-                            player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.DARK_GREEN));
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("应用毒元素效果时出错: " + e.getMessage());
-                    }
-                    
-                    spawnElementParticles(target, elementType);
-                    LOGGER.debug("对 " + target.getName().getString() + " 应用毒元素效果");
-                    break;
+                case FIRE -> applyFireEffect(player, target, playerLevel, elementalBoost);
+                case ICE -> applyIceEffect(player, target, playerLevel, elementalBoost);
+                case LIGHTNING -> applyLightningEffect(player, target, playerLevel, elementalBoost);
+                case POISON -> applyPoisonEffect(player, target, playerLevel, elementalBoost);
+                default -> LOGGER.debug("未知元素类型: " + elementType);
             }
         } catch (Exception e) {
             LOGGER.error("应用元素效果时发生未预期的错误: " + e.getMessage());
@@ -1189,32 +963,310 @@ public class AdvancedSkillsMod {
     }
     
     /**
+     * 应用火元素效果
+     */
+    private void applyFireEffect(Player player, LivingEntity target, int playerLevel, float elementalBoost) {
+        try {
+            // 火元素：点燃目标，增加伤害
+            float fireDuration = (FIRE_BASE_DURATION + (FIRE_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
+            
+            // 设置实体着火
+            try {
+                target.setRemainingFireTicks((int)(fireDuration * 20));
+            } catch (Exception e) {
+                LOGGER.error("设置实体着火时出错: " + e.getMessage());
+            }
+            
+            // 额外火焰伤害 - 使用try-catch避免潜在问题
+            try {
+                float fireDamage = (FIRE_BASE_DAMAGE + (FIRE_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
+                if (fireDamage > 0 && target.isAlive()) {
+                    target.hurt(target.damageSources().onFire(), fireDamage);
+                }
+                
+                // 提示玩家(只在伤害明显时)
+                if (fireDamage >= 3.0f) {
+                    String message = String.format("【火元素】造成 %.1f 额外伤害", fireDamage);
+                    player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.RED));
+                }
+            } catch (Exception e) {
+                LOGGER.error("应用火元素伤害时出错: " + e.getMessage());
+            }
+            
+            // 显示效果
+            try {
+                spawnElementParticles(target, ElementType.FIRE);
+            } catch (Exception e) {
+                LOGGER.error("生成火元素粒子效果时出错: " + e.getMessage());
+            }
+            
+            LOGGER.debug("对 " + target.getName().getString() + " 应用火元素效果");
+        } catch (Exception e) {
+            LOGGER.error("应用火元素效果时出错: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 应用冰元素效果
+     */
+    private void applyIceEffect(Player player, LivingEntity target, int playerLevel, float elementalBoost) {
+        try {
+            // 冰元素：减速目标，更强的减速效果
+            float iceDuration = (ICE_BASE_DURATION + (ICE_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
+            int slowAmplifier = (int)((ICE_BASE_SLOW_AMPLIFIER + (ICE_SLOW_AMPLIFIER_PER_LEVEL * playerLevel)) * elementalBoost);
+            
+            // 确保最少1级减速效果
+            slowAmplifier = Math.max(0, Math.min(slowAmplifier, 4)); // 限制最大减速等级为4
+            
+            if (target.isAlive()) {
+                try {
+                    target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, (int)(iceDuration * 20), slowAmplifier));
+                    
+                    // 高等级时添加挖掘疲劳效果
+                    if (playerLevel >= 30) {
+                        int fatigueAmplifier = playerLevel >= 60 ? 1 : 0;
+                        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, (int)(iceDuration * 15), fatigueAmplifier));
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("添加冰元素状态效果时出错: " + e.getMessage());
+                }
+            }
+            
+            // 提示玩家(只在效果明显时)
+            if (slowAmplifier >= 2) {
+                try {
+                    String message = String.format("【冰元素】减速 %d 级，持续 %.1f 秒", slowAmplifier + 1, iceDuration);
+                    player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.AQUA));
+                } catch (Exception e) {
+                    LOGGER.error("显示冰元素提示时出错: " + e.getMessage());
+                }
+            }
+            
+            // 显示效果
+            try {
+                spawnElementParticles(target, ElementType.ICE);
+            } catch (Exception e) {
+                LOGGER.error("生成冰元素粒子效果时出错: " + e.getMessage());
+            }
+            
+            LOGGER.debug("对 " + target.getName().getString() + " 应用冰元素效果");
+        } catch (Exception e) {
+            LOGGER.error("应用冰元素效果时出错: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 应用雷元素效果
+     */
+    private void applyLightningEffect(Player player, LivingEntity target, int playerLevel, float elementalBoost) {
+        try {
+            // 雷元素：有几率连锁伤害，范围更大
+            float lightningChance = (LIGHTNING_BASE_CHANCE + (LIGHTNING_CHANCE_PER_LEVEL * playerLevel)) * elementalBoost;
+            
+            // 增加伤害几率上限
+            lightningChance = Math.min(lightningChance, 0.75f);
+            
+            if (random.nextFloat() < lightningChance) {
+                // 尝试寻找范围内其他目标
+                Level level = target.level();
+                if (level == null) {
+                    LOGGER.warn("无法获取目标所在的世界Level，无法应用闪电连锁效果");
+                    return;
+                }
+                
+                // 大幅降低搜索半径，防止处理过多实体导致崩溃
+                float radius = Math.min(3.0f + (playerLevel / 50.0f), 5.0f);
+                Vec3 targetPos = target.position();
+                
+                // 创建搜索范围
+                AABB searchBox = new AABB(
+                    targetPos.x - radius, 
+                    targetPos.y - radius, 
+                    targetPos.z - radius,
+                    targetPos.x + radius, 
+                    targetPos.y + radius, 
+                    targetPos.z + radius
+                );
+                
+                try {
+                    // 限制检索数量，避免处理过多实体
+                    List<LivingEntity> nearbyEntities = level.getEntitiesOfClass(
+                        LivingEntity.class, 
+                        searchBox, 
+                        e -> e != target && e != player && 
+                             e.isAlive() &&
+                             e instanceof Monster // 只对怪物生效
+                    );
+                    
+                    // 安全检查，避免列表为null
+                    if (nearbyEntities == null) {
+                        LOGGER.debug("获取的附近实体列表为null");
+                        nearbyEntities = List.of(); // 使用空列表
+                    }
+                    
+                    // 严格限制最大连锁数量，降低崩溃风险
+                    int maxChainAllowed = Math.min(playerLevel >= 50 ? 3 : (playerLevel >= 25 ? 2 : 1), 3);
+                    int chainCount = Math.min(nearbyEntities.size(), maxChainAllowed);
+                    
+                    // 如果找到了连锁目标
+                    if (chainCount > 0) {
+                        // 计算连锁伤害
+                        float chainDamage = (LIGHTNING_BASE_DAMAGE + (LIGHTNING_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
+                        int processedCount = 0;
+                        
+                        for (int i = 0; i < Math.min(chainCount, nearbyEntities.size()); i++) {
+                            LivingEntity chainTarget = nearbyEntities.get(i);
+                            // 检查目标是否有效且活着
+                            if (chainTarget == null || !chainTarget.isAlive()) {
+                                continue;
+                            }
+                            
+                            try {
+                                // 应用伤害
+                                chainTarget.hurt(chainTarget.damageSources().indirectMagic(player, player), chainDamage);
+                                
+                                // 仅显示粒子效果，不生成实际的闪电
+                                spawnElementParticles(chainTarget, ElementType.LIGHTNING);
+                                
+                                // 记录日志
+                                LOGGER.debug("闪电连锁影响实体: " + chainTarget.getName().getString());
+                                
+                                processedCount++;
+                                if (processedCount >= maxChainAllowed) {
+                                    break; // 达到最大连锁数量，强制退出
+                                }
+                            } catch (Exception e) {
+                                LOGGER.error("处理闪电连锁单个目标时出错: " + e.getMessage());
+                            }
+                        }
+                        
+                        // 通知玩家
+                        if (processedCount > 0) {
+                            try {
+                                String message = String.format("【雷元素】连锁触发！命中 %d 个额外目标", processedCount);
+                                player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
+                            } catch (Exception e) {
+                                LOGGER.error("显示雷元素连锁提示时出错: " + e.getMessage());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("处理闪电连锁搜索实体时出错: " + e.getMessage(), e);
+                }
+            }
+            
+            // 无论连锁是否成功，都在原目标显示效果
+            try {
+                spawnElementParticles(target, ElementType.LIGHTNING);
+            } catch (Exception e) {
+                LOGGER.error("生成雷元素粒子效果时出错: " + e.getMessage());
+            }
+            
+            LOGGER.debug("对 " + target.getName().getString() + " 应用雷元素效果");
+        } catch (Exception e) {
+            LOGGER.error("应用雷元素效果时出错: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 应用毒元素效果
+     */
+    private void applyPoisonEffect(Player player, LivingEntity target, int playerLevel, float elementalBoost) {
+        try {
+            // 毒元素：持续伤害，更高等级和持续时间
+            float poisonDuration = (POISON_BASE_DURATION + (POISON_DURATION_PER_LEVEL * playerLevel)) * elementalBoost;
+            int poisonAmplifier = (int)((POISON_BASE_AMPLIFIER + (POISON_AMPLIFIER_PER_LEVEL * playerLevel)) * elementalBoost);
+            
+            // 确保最低1级毒性，且最高不超过4级
+            poisonAmplifier = Math.max(0, Math.min(poisonAmplifier, 4));
+            
+            if (target.isAlive()) {
+                try {
+                    target.addEffect(new MobEffectInstance(MobEffects.POISON, (int)(poisonDuration * 20), poisonAmplifier));
+                    
+                    // 高等级时添加虚弱效果
+                    if (playerLevel >= 35) {
+                        int weaknessLevel = playerLevel >= 70 ? 1 : 0; 
+                        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, (int)(poisonDuration * 15), weaknessLevel));
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("添加毒元素状态效果时出错: " + e.getMessage());
+                }
+            }
+            
+            // 提示玩家(只在效果明显时)
+            if (poisonAmplifier >= 2 || poisonDuration >= 5.0f) {
+                try {
+                    String message = String.format("【毒元素】中毒 %d 级，持续 %.1f 秒", poisonAmplifier + 1, poisonDuration);
+                    player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.DARK_GREEN));
+                } catch (Exception e) {
+                    LOGGER.error("显示毒元素提示时出错: " + e.getMessage());
+                }
+            }
+            
+            // 显示效果
+            try {
+                spawnElementParticles(target, ElementType.POISON);
+            } catch (Exception e) {
+                LOGGER.error("生成毒元素粒子效果时出错: " + e.getMessage());
+            }
+            
+            LOGGER.debug("对 " + target.getName().getString() + " 应用毒元素效果");
+        } catch (Exception e) {
+            LOGGER.error("应用毒元素效果时出错: " + e.getMessage());
+        }
+    }
+    
+    /**
      * 生成元素粒子效果
      */
     private void spawnElementParticles(LivingEntity entity, ElementType elementType) {
-        // 安全检查
-        if (entity == null || entity.level() == null) return;
-        
-        // 只在客户端执行效果
-        if (entity.level().isClientSide()) {
-            // 记录粒子效果请求，实际不生成粒子以避免崩溃
-            LOGGER.debug("为 " + entity.getName().getString() + " 生成 " + elementType.getDisplayName() + " 元素粒子效果");
+        try {
+            // 安全检查
+            if (entity == null) {
+                LOGGER.debug("无法生成元素粒子效果：实体为null");
+                return;
+            }
+            if (entity.level() == null) {
+                LOGGER.debug("无法生成元素粒子效果：实体所在世界为null");
+                return;
+            }
+            
+            // 只在客户端执行效果
+            if (entity.level().isClientSide()) {
+                // 记录粒子效果请求，实际不生成粒子以避免崩溃
+                LOGGER.debug("为 " + entity.getName().getString() + " 生成 " + elementType.getDisplayName() + " 元素粒子效果");
+            }
+        } catch (Exception e) {
+            LOGGER.error("生成元素粒子效果时出错: " + e.getMessage());
         }
     }
 
     /**
      * 从箭矢中获取拉弓力度
+     * 返回0.0-1.0之间的值，表示拉弓程度
      */
     private float getPowerFromArrow(Arrow arrow) {
-        // 获取箭矢的速度，用于计算拉弓程度
-        double velocity = arrow.getDeltaMovement().length();
-        
-        // 箭矢的典型速度范围在 0.5 (未拉满) 到 3.0 (拉满) 之间
-        // 将速度范围映射到 0.0 - 1.0
-        float power = (float) ((velocity - 0.5) / 2.5);
-        
-        // 确保值在 0.0 到 1.0 之间
-        return Math.max(0.0F, Math.min(1.0F, power));
+        try {
+            // 安全检查
+            if (arrow == null || arrow.getDeltaMovement() == null) {
+                LOGGER.debug("无法计算弓箭力度：箭矢或移动向量为null");
+                return 1.0F; // 默认返回满力
+            }
+            
+            // 获取箭矢的速度，用于计算拉弓程度
+            double velocity = arrow.getDeltaMovement().length();
+            
+            // 箭矢的典型速度范围在 0.5 (未拉满) 到 3.0 (拉满) 之间
+            // 将速度范围映射到 0.0 - 1.0
+            float power = (float) ((velocity - 0.5) / 2.5);
+            
+            // 确保值在 0.0 到 1.0 之间
+            return Math.max(0.0F, Math.min(1.0F, power));
+        } catch (Exception e) {
+            LOGGER.error("计算弓箭力度时出错: " + e.getMessage());
+            return 1.0F; // 发生错误时默认返回最大值
+        }
     }
 
     // 武器专精相关方法
@@ -1232,7 +1284,10 @@ public class AdvancedSkillsMod {
         persistentData.putInt(WEAPON_SPECIALTY_KEY, weaponSpecialty.ordinal());
     }
 
-    private void cycleWeaponSpecialty(Player player) {
+    /**
+     * 循环切换玩家的武器专精
+     */
+    public void cycleWeaponSpecialty(Player player) {
         UUID playerId = player.getUUID();
         WeaponSpecialty currentSpecialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
         WeaponSpecialty nextSpecialty = WeaponSpecialty.NONE;
@@ -1810,19 +1865,10 @@ public class AdvancedSkillsMod {
     }
 
     /**
-     * 从经验值计算等级
+     * 根据XP计算玩家等级
      */
-    private int calculateLevelFromXp(int xp) {
-        if (xp <= 0) return 0;
-        
-        // 从经验值计算等级
-        for (int level = 1; level <= 100; level++) {
-            int xpForNextLevel = calculateXpForLevel(level + 1);
-            if (xp < xpForNextLevel) {
-                return level;
-            }
-        }
-        return 100; // 达到最大等级
+    public int calculateLevelFromXp(int xp) {
+        return Math.min(100, (int) Math.sqrt(xp / 10));
     }
     
     /**
@@ -1853,7 +1899,7 @@ public class AdvancedSkillsMod {
      * 获取单例实例
      */
     public static AdvancedSkillsMod getInstance() {
-        return clientInstance;
+        return INSTANCE;
     }
 
     /**
@@ -1865,146 +1911,116 @@ public class AdvancedSkillsMod {
     }
 
     /**
-     * 监听箭矢撞击事件，应用元素效果
+     * 检测伤害是否来自玩家射出的箭矢
+     * 安全地检查伤害来源，避免空引用导致崩溃
      */
-    @SubscribeEvent
-    public void onArrowImpact(ProjectileImpactEvent event) {
-        // 检查是否是箭矢
-        if (event.getProjectile() instanceof Arrow arrow) {
-            // 获取发射箭矢的玩家
-            Entity shooter = arrow.getOwner();
-            if (!(shooter instanceof Player player)) {
-                return; // 不是玩家发射的箭
+    private boolean isPlayerArrowDamage(LivingHurtEvent event) {
+        try {
+            // 获取伤害来源
+            if (event == null || event.getSource() == null) {
+                return false;
             }
             
-            LOGGER.debug("处理玩家 " + player.getName().getString() + " 的箭矢撞击事件");
-            
-            // 获取命中的实体
-            if (event.getRayTraceResult() instanceof net.minecraft.world.phys.EntityHitResult hitResult) {
-                Entity hitEntity = hitResult.getEntity();
-                if (hitEntity instanceof LivingEntity target) {
-                    // 获取玩家技能等级和元素类型
-                    UUID playerId = player.getUUID();
-                    int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(playerId, 0));
-                    ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
-                    WeaponSpecialty weaponSpecialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
-                    
-                    // 获取拉弓程度
-                    float drawPercentage = getPowerFromArrow(arrow);
-                    
-                    // 计算暴击几率
-                    float critChance = BASE_CRIT_CHANCE + (CRIT_CHANCE_PER_LEVEL * playerLevel);
-                    
-                    // 弓箭专精额外暴击几率
-                    if (weaponSpecialty == WeaponSpecialty.BOW) {
-                        critChance += BOW_SPECIALTY_CRIT_BONUS;
-                    }
-                    
-                    // 满弓额外暴击几率
-                    if (drawPercentage >= 0.95f) {
-                        critChance += FULL_DRAW_CRIT_BONUS;
-                    }
-                    
-                    // 判断是否暴击
-                    boolean isCritical = random.nextFloat() < critChance;
-                    
-                    // 应用基础伤害增益
-                    float maxPlayerExtraDamage = Math.min(
-                        BASE_EXTRA_ARROW_DAMAGE + (ARROW_DAMAGE_PER_LEVEL * playerLevel),
-                        MAX_EXTRA_ARROW_DAMAGE
-                    );
-                    
-                    // 武器专精额外伤害
-                    if (weaponSpecialty == WeaponSpecialty.BOW) {
-                        maxPlayerExtraDamage *= 1.5f; // 弓箭专精增加50%伤害
-                    }
-                    
-                    float extraDamage = maxPlayerExtraDamage * drawPercentage;
-                    
-                    // 如果暴击，计算暴击伤害
-                    if (isCritical) {
-                        float critDamage = BASE_CRIT_DAMAGE + (CRIT_DAMAGE_PER_LEVEL * playerLevel);
-                        
-                        // 弓箭专精额外暴击伤害
-                        if (weaponSpecialty == WeaponSpecialty.BOW) {
-                            critDamage += BOW_SPECIALTY_CRIT_DAMAGE_BONUS;
-                        }
-                        
-                        // 应用暴击伤害倍率
-                        extraDamage *= critDamage;
-                        
-                        // 暴击提示
-                        player.sendSystemMessage(
-                            Component.translatable("advancedskills.critical.bow", extraDamage)
-                                .withStyle(ChatFormatting.RED)
-                        );
-                        
-                        // 播放暴击音效
-                        player.playSound(SoundEvents.PLAYER_ATTACK_CRIT, 1.0F, 1.0F);
-                    }
-                    
-                    // 设置箭矢伤害
-                    arrow.setBaseDamage(arrow.getBaseDamage() + extraDamage);
-                    
-                    // 应用元素效果
-                    applyElementalEffect(player, target, elementType, playerLevel, true);
-                }
+            // 检查直接伤害实体（如果是箭矢，这将是箭矢实体）
+            Entity directEntity = event.getSource().getDirectEntity();
+            if (!(directEntity instanceof Arrow)) {
+                return false;
             }
             
-            // 增加箭矢速度以提高射程 (仅适用于较高等级)
-            if (calculateLevelFromXp(playerSkillXp.getOrDefault(player.getUUID(), 0)) >= 10) {
-                float drawPercentage = getPowerFromArrow(arrow);
-                int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(player.getUUID(), 0));
-                float rangeBoost = Math.min(
-                    BASE_ARROW_RANGE_BOOST + (ARROW_RANGE_BOOST_PER_LEVEL * playerLevel),
-                    MAX_ARROW_RANGE_BOOST
-                );
-                
-                // 弓箭专精额外射程
-                if (playerWeaponSpecialties.getOrDefault(player.getUUID(), WeaponSpecialty.NONE) == WeaponSpecialty.BOW) {
-                    rangeBoost *= 1.5f; // 弓箭专精增加50%射程
-                }
-                
-                // 根据拉弓程度调整射程提升
-                rangeBoost *= drawPercentage;
-                
-                if (rangeBoost > 0.05f) { // 只有当提升明显时才应用
-                    // 获取当前速度向量并增加其大小
-                    double speedX = arrow.getDeltaMovement().x * (1 + rangeBoost);
-                    double speedY = arrow.getDeltaMovement().y * (1 + rangeBoost);
-                    double speedZ = arrow.getDeltaMovement().z * (1 + rangeBoost);
-                    
-                    arrow.setDeltaMovement(speedX, speedY, speedZ);
-                }
-            }
+            // 检查原始伤害实体（射手，应该是玩家）
+            Entity sourceEntity = event.getSource().getEntity();
+            return (sourceEntity instanceof Player);
+        } catch (Exception e) {
+            LOGGER.error("检查箭矢伤害来源时出错: " + e.getMessage());
+            return false;
         }
     }
     
     /**
-     * 监听近战伤害事件，应用元素效果
+     * 获取箭矢的拉弓力度（安全版本）
+     * 从伤害事件中安全地提取拉弓力度
+     */
+    private float getArrowPowerFromEvent(LivingHurtEvent event) {
+        try {
+            if (event == null || event.getSource() == null) {
+                return 1.0f; // 默认满力
+            }
+            
+            Entity directEntity = event.getSource().getDirectEntity();
+            if (!(directEntity instanceof Arrow arrow)) {
+                return 1.0f; // 默认满力
+            }
+            
+            // 尝试获取箭矢的速度作为估计
+            return getPowerFromArrow(arrow);
+        } catch (Exception e) {
+            LOGGER.error("从事件获取箭矢力度时出错: " + e.getMessage());
+            return 1.0f; // 默认满力
+        }
+    }
+    
+    /**
+     * 处理所有类型的伤害事件：近战、弓箭等
+     * 统一处理所有玩家造成的伤害
      */
     @SubscribeEvent
     public void onLivingHurt(LivingHurtEvent event) {
-        // 检查是否是玩家造成的伤害
-        Entity sourceEntity = event.getSource().getEntity();
-        if (!(sourceEntity instanceof Player player)) {
-            return;
+        try {
+            // 跳过客户端事件处理
+            if (event.getEntity().level().isClientSide()) {
+                return;
+            }
+            
+            // 获取基本信息
+            Entity sourceEntity = event.getSource().getEntity();
+            if (!(sourceEntity instanceof Player player)) {
+                return; // 不是玩家造成的伤害
+            }
+            
+            // 跳过箭矢造成的伤害，因为箭矢伤害现在由onArrowImpact专门处理
+            if (event.getSource().getDirectEntity() instanceof Arrow) {
+                return;
+            }
+            
+            // 检查玩家手持物品（剑类型近战武器）
+            ItemStack heldItem = player.getMainHandItem();
+            if (!(heldItem.getItem() instanceof SwordItem) && heldItem.getItem() != Items.TRIDENT) {
+                return;
+            }
+            
+            // 获取玩家技能数据
+            UUID playerId = player.getUUID();
+            int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(playerId, 0));
+            ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+            WeaponSpecialty weaponSpecialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
+            
+            // 获取目标
+            LivingEntity target = event.getEntity();
+            if (target == null || !target.isAlive()) {
+                return;
+            }
+            
+            // 处理近战伤害
+            processMeleeDamage(event, player, target, playerLevel, weaponSpecialty, elementType);
+            
+        } catch (Exception e) {
+            // 捕获所有异常，防止崩溃
+            LOGGER.error("处理伤害事件时出错: " + e.getMessage());
+            e.printStackTrace();
         }
-        
-        // 检查玩家是否使用剑
-        ItemStack heldItem = player.getMainHandItem();
-        if (!(heldItem.getItem() instanceof SwordItem) && heldItem.getItem() != Items.TRIDENT) {
-            return;
-        }
-        
-        // 获取玩家技能等级和专精
-        UUID playerId = player.getUUID();
-        int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(playerId, 0));
-        WeaponSpecialty weaponSpecialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
-        
-        // 处理连击系统
-        float comboCritBonus = 0.0f;
-        if (event.getEntity() instanceof LivingEntity target) {
+    }
+    
+    /**
+     * 处理近战伤害
+     * 从主方法分离出来的逻辑，处理剑的伤害和效果
+     */
+    private void processMeleeDamage(LivingHurtEvent event, Player player, LivingEntity target, 
+                                   int playerLevel, WeaponSpecialty weaponSpecialty, ElementType elementType) {
+        try {
+            UUID playerId = player.getUUID();
+            
+            // 处理连击系统
+            float comboCritBonus = 0.0f;
             UUID targetId = target.getUUID();
             ComboTracker combo = playerCombos.get(playerId);
             
@@ -2018,80 +2034,190 @@ public class AdvancedSkillsMod {
                 
                 // 提示玩家连击次数
                 if (combo.getComboCount() > 1) {
-                    player.sendSystemMessage(
-                        Component.translatable("advancedskills.combo", combo.getComboCount())
-                            .withStyle(ChatFormatting.GOLD)
-                    );
+                    try {
+                        player.sendSystemMessage(
+                            Component.translatable("advancedskills.combo", combo.getComboCount())
+                                .withStyle(ChatFormatting.GOLD)
+                        );
+                    } catch (Exception e) {
+                        LOGGER.error("显示连击提示时出错: " + e.getMessage());
+                    }
                 }
             } else {
-                // 新的连击
+                // 开始新的连击
                 playerCombos.put(playerId, new ComboTracker(targetId));
             }
-        }
-        
-        // 计算暴击几率
-        float critChance = BASE_CRIT_CHANCE + (CRIT_CHANCE_PER_LEVEL * playerLevel) + comboCritBonus;
-        
-        // 剑专精额外暴击几率
-        if (weaponSpecialty == WeaponSpecialty.SWORD) {
-            critChance += SWORD_SPECIALTY_CRIT_BONUS;
-        }
-        
-        // 判断是否暴击
-        boolean isCritical = random.nextFloat() < critChance;
-        
-        // 根据玩家等级计算额外伤害
-        float extraDamage = Math.min(
-            BASE_EXTRA_SWORD_DAMAGE + (SWORD_DAMAGE_PER_LEVEL * playerLevel),
-            MAX_EXTRA_SWORD_DAMAGE
-        );
-        
-        // 剑专精额外伤害
-        if (weaponSpecialty == WeaponSpecialty.SWORD) {
-            extraDamage *= 1.5f; // 剑专精增加50%伤害
-        }
-        
-        // 如果暴击，计算暴击伤害
-        if (isCritical) {
-            float critDamage = BASE_CRIT_DAMAGE + (CRIT_DAMAGE_PER_LEVEL * playerLevel);
             
-            // 剑专精额外暴击伤害
+            // 计算暴击几率
+            float critChance = BASE_CRIT_CHANCE + (CRIT_CHANCE_PER_LEVEL * playerLevel) + comboCritBonus;
+            
+            // 剑专精额外暴击几率
             if (weaponSpecialty == WeaponSpecialty.SWORD) {
-                critDamage += SWORD_SPECIALTY_CRIT_DAMAGE_BONUS;
+                critChance += SWORD_SPECIALTY_CRIT_BONUS;
             }
             
-            // 应用暴击伤害倍率
-            extraDamage *= critDamage;
+            // 判断是否暴击
+            boolean isCritical = random.nextFloat() < critChance;
             
-            // 暴击提示
-            player.sendSystemMessage(
-                Component.translatable("advancedskills.critical.sword", extraDamage)
-                    .withStyle(ChatFormatting.RED)
+            // 应用基础伤害增益
+            float maxPlayerExtraDamage = Math.min(
+                BASE_EXTRA_SWORD_DAMAGE + (SWORD_DAMAGE_PER_LEVEL * playerLevel),
+                MAX_EXTRA_SWORD_DAMAGE
             );
             
-            // 播放暴击音效
-            player.playSound(SoundEvents.PLAYER_ATTACK_CRIT, 1.0F, 1.0F);
-        }
-        
-        // 增加伤害
-        float originalDamage = event.getAmount();
-        event.setAmount(originalDamage + extraDamage);
-        
-        // 获取元素类型并应用效果
-        ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
-        if (event.getEntity() instanceof LivingEntity target) {
-            applyElementalEffect(player, target, elementType, playerLevel, false);
-        }
-        
-        // 在高等级时显示伤害提示（非暴击时）
-        if (!isCritical && playerLevel >= 15 && extraDamage >= 5.0f) {
-            player.sendSystemMessage(
-                Component.translatable("advancedskills.sword.damage", extraDamage)
-                    .withStyle(ChatFormatting.BLUE)
-            );
+            // 剑专精额外伤害
+            if (weaponSpecialty == WeaponSpecialty.SWORD) {
+                maxPlayerExtraDamage *= 1.5f; // 剑专精增加50%伤害
+            }
+            
+            float extraDamage = maxPlayerExtraDamage;
+            
+            // 如果暴击，计算暴击伤害
+            if (isCritical) {
+                float critDamage = BASE_CRIT_DAMAGE + (CRIT_DAMAGE_PER_LEVEL * playerLevel);
+                
+                // 剑专精额外暴击伤害
+                if (weaponSpecialty == WeaponSpecialty.SWORD) {
+                    critDamage += SWORD_SPECIALTY_CRIT_DAMAGE_BONUS;
+                }
+                
+                // 应用暴击伤害倍率
+                extraDamage *= critDamage;
+                
+                // 暴击提示
+                try {
+                    String message = String.format("【暴击】造成 %.1f 额外伤害！", extraDamage);
+                    player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.RED));
+                    
+                    // 播放暴击音效
+                    player.playSound(SoundEvents.PLAYER_ATTACK_CRIT, 1.0F, 1.0F);
+                } catch (Exception e) {
+                    LOGGER.error("显示近战暴击提示时出错: " + e.getMessage());
+                }
+            }
+            
+            // 增加伤害
+            float originalDamage = event.getAmount();
+            event.setAmount(originalDamage + extraDamage);
+            
+            // 应用元素效果
+            try {
+                applyElementalEffect(player, target, elementType, playerLevel, false);
+            } catch (Exception e) {
+                LOGGER.error("应用近战元素效果时出错: " + e.getMessage());
+            }
+            
+            // 在高等级时显示伤害提示（非暴击时）
+            if (!isCritical && playerLevel >= 15 && extraDamage >= 5.0f) {
+                try {
+                    player.sendSystemMessage(
+                        Component.literal("造成 " + String.format("%.1f", extraDamage) + " 额外伤害")
+                            .withStyle(ChatFormatting.YELLOW)
+                    );
+                } catch (Exception e) {
+                    LOGGER.error("显示额外伤害提示时出错: " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("处理近战伤害时出错: " + e.getMessage());
+            e.printStackTrace();
         }
     }
-
+    
+    /**
+     * 处理弓箭伤害
+     * 从主方法分离出来的逻辑，安全地处理箭矢的伤害和效果
+     */
+    private void processArrowDamage(LivingHurtEvent event, Player player, LivingEntity target, 
+                                   int playerLevel, WeaponSpecialty weaponSpecialty, ElementType elementType) {
+        try {
+            // 获取拉弓力度
+            float drawPercentage = getArrowPowerFromEvent(event);
+            
+            // 计算暴击几率
+            float critChance = BASE_CRIT_CHANCE + (CRIT_CHANCE_PER_LEVEL * playerLevel);
+            
+            // 弓箭专精额外暴击几率
+            if (weaponSpecialty == WeaponSpecialty.BOW) {
+                critChance += BOW_SPECIALTY_CRIT_BONUS;
+            }
+            
+            // 满弓额外暴击几率
+            if (drawPercentage >= 0.95f) {
+                critChance += FULL_DRAW_CRIT_BONUS;
+            }
+            
+            // 判断是否暴击
+            boolean isCritical = random.nextFloat() < critChance;
+            
+            // 应用基础伤害增益
+            float maxPlayerExtraDamage = Math.min(
+                BASE_EXTRA_ARROW_DAMAGE + (ARROW_DAMAGE_PER_LEVEL * playerLevel),
+                MAX_EXTRA_ARROW_DAMAGE
+            );
+            
+            // 弓箭专精额外伤害
+            if (weaponSpecialty == WeaponSpecialty.BOW) {
+                maxPlayerExtraDamage *= 1.5f; // 弓箭专精增加50%伤害
+            }
+            
+            // 根据拉弓力度调整伤害
+            float extraDamage = maxPlayerExtraDamage * drawPercentage;
+            
+            // 如果暴击，计算暴击伤害
+            if (isCritical) {
+                float critDamage = BASE_CRIT_DAMAGE + (CRIT_DAMAGE_PER_LEVEL * playerLevel);
+                
+                // 弓箭专精额外暴击伤害
+                if (weaponSpecialty == WeaponSpecialty.BOW) {
+                    critDamage += BOW_SPECIALTY_CRIT_DAMAGE_BONUS;
+                }
+                
+                // 应用暴击伤害倍率
+                extraDamage *= critDamage;
+                
+                // 暴击提示
+                try {
+                    String message = String.format("【暴击】造成 %.1f 额外伤害！", extraDamage);
+                    player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.RED));
+                    
+                    // 播放暴击音效
+                    player.playSound(SoundEvents.PLAYER_ATTACK_CRIT, 0.5F, 1.0F);
+                } catch (Exception e) {
+                    LOGGER.error("显示弓箭暴击提示时出错: " + e.getMessage());
+                }
+            }
+            
+            // 设置伤害量
+            float originalDamage = event.getAmount();
+            event.setAmount(originalDamage + extraDamage);
+            LOGGER.debug("设置弓箭伤害: " + originalDamage + " -> " + (originalDamage + extraDamage));
+            
+            // 应用元素效果
+            try {
+                applyElementalEffect(player, target, elementType, playerLevel, true);
+            } catch (Exception e) {
+                LOGGER.error("应用弓箭元素效果时出错: " + e.getMessage());
+            }
+            
+            // 在高等级时显示伤害提示（非暴击时）
+            if (!isCritical && playerLevel >= 15 && extraDamage >= 5.0f) {
+                try {
+                    player.sendSystemMessage(
+                        Component.literal("弓箭造成 " + String.format("%.1f", extraDamage) + " 额外伤害")
+                            .withStyle(ChatFormatting.YELLOW)
+                    );
+                } catch (Exception e) {
+                    LOGGER.error("显示弓箭伤害提示时出错: " + e.getMessage());
+                }
+            }
+            
+        } catch (Exception e) {
+            LOGGER.error("处理弓箭伤害时出错: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
     /**
      * 监听玩家等级变化事件
      */
@@ -2149,7 +2275,7 @@ public class AdvancedSkillsMod {
             }
         }
     }
-
+    
     /**
      * 根据玩家等级应用属性加成
      */
@@ -2236,7 +2362,7 @@ public class AdvancedSkillsMod {
             e.printStackTrace();
         }
     }
-
+    
     /**
      * 移除玩家属性修改器
      */
@@ -2260,5 +2386,129 @@ public class AdvancedSkillsMod {
         } catch (Exception e) {
             LOGGER.error("移除玩家属性修改器时发生错误: " + e.getMessage());
         }
+    }
+    
+    /**
+     * 检测弓箭击中，直接修改实体血量并应用元素效果
+     * 最简单直接的方法，避免复杂的事件处理逻辑
+     */
+    @SubscribeEvent
+    public void onArrowImpact(ProjectileImpactEvent event) {
+        // 只在服务器端处理
+        if (event.getProjectile().level().isClientSide()) {
+            return;
+        }
+        
+        try {
+            // 判断是否为箭矢
+            if (!(event.getProjectile() instanceof Arrow arrow)) {
+                return;
+            }
+            
+            // 检查是否击中了实体
+            if (!(event.getRayTraceResult() instanceof EntityHitResult entityHit)) {
+                return;
+            }
+            
+            // 获取射箭的玩家
+            Entity shooter = arrow.getOwner();
+            if (!(shooter instanceof Player player)) {
+                return;
+            }
+            
+            // 获取被击中的实体
+            Entity hitEntity = entityHit.getEntity();
+            if (!(hitEntity instanceof LivingEntity target) || !target.isAlive()) {
+                return;
+            }
+            
+            // 获取玩家技能数据
+            UUID playerId = player.getUUID();
+            int playerLevel = calculateLevelFromXp(playerSkillXp.getOrDefault(playerId, 0));
+            ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+            WeaponSpecialty weaponSpecialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
+            
+            // 基本伤害计算(简化版)
+            float extraDamage = 2.0f + (playerLevel * 0.5f);
+            
+            // 弓箭专精额外伤害
+            if (weaponSpecialty == WeaponSpecialty.BOW) {
+                extraDamage *= 1.5f; // 弓箭专精增加50%伤害
+            }
+            
+            // 如果玩家有等级，应用伤害和效果
+            if (playerLevel > 0) {
+                // 直接对实体造成伤害
+                target.hurt(target.damageSources().arrow(arrow, player), extraDamage);
+                
+                // 直接应用元素效果
+                if (elementType != ElementType.NONE) {
+                    try {
+                        applyElementalEffect(player, target, elementType, playerLevel, true);
+                    } catch (Exception e) {
+                        LOGGER.error("应用弓箭元素效果时出错: " + e.getMessage());
+                    }
+                }
+                
+                // 简单的提示消息
+                if (playerLevel >= 15) {
+                    player.sendSystemMessage(
+                        Component.literal("弓箭造成 " + String.format("%.1f", extraDamage) + " 额外伤害")
+                            .withStyle(ChatFormatting.YELLOW)
+                    );
+                }
+            }
+        } catch (Exception e) {
+            // 捕获所有异常，不让游戏崩溃
+            LOGGER.error("处理箭矢撞击时出错: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理鼠标点击事件
+     * 用于处理UI界面的交互
+     */
+    @SubscribeEvent
+    public void onMouseInput(InputEvent.MouseButton event) {
+        // 只处理按下动作
+        if (event.getAction() != GLFW.GLFW_PRESS) {
+            return;
+        }
+        
+        // 获取当前玩家
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
+        
+        // 不再需要处理UI点击，因为KillStatsScreen已经处理了
+    }
+
+    /**
+     * 获取玩家技能经验
+     */
+    public int getPlayerSkillXp(UUID playerId) {
+        return playerSkillXp.getOrDefault(playerId, 0);
+    }
+
+    /**
+     * 获取玩家元素类型
+     */
+    public ElementType getPlayerElementType(UUID playerId) {
+        return playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+    }
+
+    /**
+     * 获取玩家武器专精
+     */
+    public WeaponSpecialty getPlayerWeaponSpecialty(UUID playerId) {
+        return playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
+    }
+
+    /**
+     * 获取玩家击杀统计
+     */
+    public Map<String, Integer> getPlayerKillStats(UUID playerId) {
+        return playerKillStats.getOrDefault(playerId, new HashMap<>());
     }
 } 

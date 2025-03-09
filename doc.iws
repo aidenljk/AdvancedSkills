@@ -15,10 +15,10 @@
       <change beforePath="$PROJECT_DIR$/.gradle/file-system.probe" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/file-system.probe" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/libs/advancedskills-1.0.1.jar" beforeDir="false" afterPath="$PROJECT_DIR$/build/libs/advancedskills-1.0.1.jar" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/sourcesSets/main/com/advancedskills/AdvancedSkillsMod.class" beforeDir="false" afterPath="$PROJECT_DIR$/build/sourcesSets/main/com/advancedskills/AdvancedSkillsMod.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ComboTracker.class.uniqueId1" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ElementType.class.uniqueId3" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$WeaponSpecialty.class.uniqueId2" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod.class.uniqueId0" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ComboTracker.class.uniqueId1" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ComboTracker.class.uniqueId1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ElementType.class.uniqueId3" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$ElementType.class.uniqueId3" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$WeaponSpecialty.class.uniqueId2" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod$WeaponSpecialty.class.uniqueId2" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod.class.uniqueId0" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/compileTransaction/stash-dir/AdvancedSkillsMod.class.uniqueId0" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build/tmp/compileJava/previous-compilation-data.bin" beforeDir="false" afterPath="$PROJECT_DIR$/build/tmp/compileJava/previous-compilation-data.bin" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/doc.iws" beforeDir="false" afterPath="$PROJECT_DIR$/doc.iws" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/com/advancedskills/AdvancedSkillsMod.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/advancedskills/AdvancedSkillsMod.java" afterDir="false" />
@@ -151,7 +151,7 @@
     &quot;last_opened_file_path&quot;: &quot;D:/doc/doc.ipr&quot;
   }
 }</component>
-  <component name="RunManager" selected="Gradle.doc [jar]">
+  <component name="RunManager" selected="Gradle.doc [build]">
     <configuration default="true" type="Applet" factoryName="Applet">
       <module name="" />
       <option name="MAIN_CLASS_NAME" />
@@ -314,8 +314,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Gradle.doc [jar]" />
         <item itemvalue="Gradle.doc [build]" />
+        <item itemvalue="Gradle.doc [jar]" />
         <item itemvalue="Gradle.doc [jarJar]" />
         <item itemvalue="Gradle.doc [runClient]" />
         <item itemvalue="Gradle.doc [runServer]" />
