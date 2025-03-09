@@ -325,7 +325,7 @@ public class AdvancedSkillsMod {
         // 注册元素切换按键
         elementKeyMapping = new KeyMapping(
             "key.advancedskills.element", // 键位名称
-            GLFW.GLFW_KEY_L,             // 默认键位（L键）
+            GLFW.GLFW_KEY_V,             // 默认键位（V键）
             "key.categories.advancedskills" // 键位分类
         );
         event.register(elementKeyMapping);
@@ -1952,7 +1952,7 @@ public class AdvancedSkillsMod {
                     ElementType newElementType = ElementType.fromLevel(currentLevel);
                     if (newElementType != ElementType.NONE && newElementType != ElementType.fromLevel(lastAppliedLevel)) {
                         player.sendSystemMessage(Component.literal("你解锁了新的元素类型: " + newElementType.getDisplayName() + "！").withStyle(newElementType.getColor()));
-                        player.sendSystemMessage(Component.literal("按 " + elementKeyMapping.getTranslatedKeyMessage().getString() + " 键切换元素类型").withStyle(ChatFormatting.GRAY));
+                        player.sendSystemMessage(Component.literal("按 V 键切换元素类型").withStyle(ChatFormatting.GRAY));
                     }
                 }
             }
