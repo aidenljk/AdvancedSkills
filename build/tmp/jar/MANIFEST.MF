@@ -1,8 +1,8 @@
 Manifest-Version: 1.0
 Specification-Title: advancedskills
-Specification-Vendor: Advanced Skills Team
+Specification-Vendor: Logic
 Specification-Version: 1
 Implementation-Title: doc
-Implementation-Version: 1.0.0
-Implementation-Vendor: Advanced Skills Team
+Implementation-Version: 1.0.1
+Implementation-Vendor: Logic
 

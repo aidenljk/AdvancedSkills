@@ -1,0 +1,34 @@
+{
+  "key.advancedskills.stats": "Player Stats",
+  "key.advancedskills.element": "Switch Element",
+  "key.advancedskills.specialty": "Switch Weapon Specialty",
+  "key.categories.advancedskills": "Advanced Skills",
+  "screen.advancedskills.stats": "Skills & Statistics",
+  
+  "advancedskills.element.none": "None",
+  "advancedskills.element.fire": "Fire",
+  "advancedskills.element.ice": "Ice",
+  "advancedskills.element.lightning": "Lightning",
+  "advancedskills.element.poison": "Poison",
+  
+  "advancedskills.specialty.none": "None",
+  "advancedskills.specialty.bow": "Bow",
+  "advancedskills.specialty.sword": "Sword",
+  
+  "advancedskills.element.switch": "Element Switched to: %s",
+  "advancedskills.specialty.switch": "Weapon Specialty Switched to: %s",
+  "advancedskills.element.lightning.chain": "Lightning Chain! Hit %d additional targets",
+  "advancedskills.sword.damage": "Sword Enhancement: +%.1f damage",
+  "advancedskills.critical.bow": "CRITICAL! Bow deals +%.1f extra damage!",
+  "advancedskills.critical.sword": "CRITICAL! Sword deals +%.1f extra damage!",
+  "advancedskills.combo": "Combo x%d",
+  
+  "commands.advancedskills.exp.add.success": "Granted %s %d skill experience points. Current level: %d (Total XP: %d)",
+  "commands.advancedskills.exp.add.target": "You received %d skill experience points! Current level: %d",
+  "commands.advancedskills.exp.get.success": "%s's skill level: %d (Total XP: %d)\nXP needed for next level: %d",
+  "commands.advancedskills.summon.invalid_entity": "Invalid entity type: %s",
+  "commands.advancedskills.summon.not_monster": "Only monster entities can be summoned with levels.",
+  "commands.advancedskills.summon.missing_position": "Missing spawn position parameter.",
+  "commands.advancedskills.summon.failed": "Failed to create monster entity.",
+  "commands.advancedskills.summon.success": "Summoned level %d %s at %s"
+} 

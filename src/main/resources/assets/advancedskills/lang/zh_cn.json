@@ -1,0 +1,34 @@
+{
+  "key.advancedskills.stats": "玩家统计",
+  "key.advancedskills.element": "切换元素",
+  "key.advancedskills.specialty": "切换武器专精",
+  "key.categories.advancedskills": "高级技能",
+  "screen.advancedskills.stats": "技能与击杀统计",
+  
+  "advancedskills.element.none": "无",
+  "advancedskills.element.fire": "火",
+  "advancedskills.element.ice": "冰",
+  "advancedskills.element.lightning": "雷",
+  "advancedskills.element.poison": "毒",
+  
+  "advancedskills.specialty.none": "无",
+  "advancedskills.specialty.bow": "弓箭",
+  "advancedskills.specialty.sword": "剑术",
+  
+  "advancedskills.element.switch": "元素切换为: %s",
+  "advancedskills.specialty.switch": "武器专精切换为: %s",
+  "advancedskills.element.lightning.chain": "雷元素连锁触发！命中 %d 个额外目标",
+  "advancedskills.sword.damage": "剑术强化: +%.1f 伤害",
+  "advancedskills.critical.bow": "暴击！弓箭造成 +%.1f 额外伤害！",
+  "advancedskills.critical.sword": "暴击！剑术造成 +%.1f 额外伤害！",
+  "advancedskills.combo": "连击 x%d",
+  
+  "commands.advancedskills.exp.add.success": "已给予 %s %d 点技能经验。当前等级：%d (总经验：%d)",
+  "commands.advancedskills.exp.add.target": "你获得了 %d 点技能经验！当前等级：%d",
+  "commands.advancedskills.exp.get.success": "%s 的技能等级：%d (总经验：%d)\n距离下一级还需：%d 经验",
+  "commands.advancedskills.summon.invalid_entity": "无效的实体类型: %s",
+  "commands.advancedskills.summon.not_monster": "只能生成怪物类型实体。",
+  "commands.advancedskills.summon.missing_position": "缺少生成位置参数。",
+  "commands.advancedskills.summon.failed": "无法创建怪物实体。",
+  "commands.advancedskills.summon.success": "已生成等级 %d 的 %s 在 %s"
+} 
