@@ -58,6 +58,9 @@ import net.minecraft.client.KeyMapping;
 import org.lwjgl.glfw.GLFW;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.block.state.BlockState;
+import com.mojang.blaze3d.platform.InputConstants;
 
 @Mod(AdvancedSkillsMod.MODID)
 public class AdvancedSkillsMod {
@@ -301,42 +304,160 @@ public class AdvancedSkillsMod {
         
         // 注册事件监听器
         MinecraftForge.EVENT_BUS.register(this);
+        
+        LOGGER.info("热键将被注册: G=元素切换, K=技能统计, M=武器专精");
     }
     
     /**
      * 客户端设置
      */
     private void clientSetup(final FMLClientSetupEvent event) {
-        LOGGER.info("初始化客户端UI");
+        LOGGER.info("==== 初始化客户端UI与热键 - 开始 ====");
+        
+        // 在游戏启动时检查热键状态和冲突
+        event.enqueueWork(() -> {
+            LOGGER.info("检查按键绑定状态...");
+            
+            // 获取当前所有按键映射
+            KeyMapping[] allKeys = Minecraft.getInstance().options.keyMappings;
+            LOGGER.info("游戏总共有 " + allKeys.length + " 个按键绑定");
+            
+            // 检查我们的热键是否正确注册，以及是否与原版冲突
+            boolean elementKeyFound = false;
+            boolean statsKeyFound = false;
+            boolean specialtyKeyFound = false;
+            
+            // 记录L键和G键的使用情况
+            LOGGER.info("==== 按键使用情况 ====");
+            for (KeyMapping key : allKeys) {
+                // 特别记录L键和G键的使用
+                if (key.getKey().getValue() == GLFW.GLFW_KEY_L) {
+                    LOGGER.warn("L键(76)已被绑定到: " + key.getName());
+                }
+                if (key.getKey().getValue() == GLFW.GLFW_KEY_G) {
+                    LOGGER.warn("G键(71)已被绑定到: " + key.getName());
+                }
+                
+                // 检查我们的热键是否在列表中
+                if (key.getName().equals("key.advancedskills.element")) {
+                    elementKeyFound = true;
+                    LOGGER.info("元素切换键已设置为: " + key.getKey().getDisplayName().getString() + 
+                               " (键值:" + key.getKey().getValue() + ")");
+                    
+                    // 如果元素切换键不是G键，记录错误
+                    if (key.getKey().getValue() != GLFW.GLFW_KEY_G) {
+                        LOGGER.error("元素切换键被设置为 " + key.getKey().getDisplayName().getString() + 
+                                    "，而不是预期的G键(71)");
+                    }
+                }
+                if (key.getName().equals("key.advancedskills.stats")) {
+                    statsKeyFound = true;
+                    LOGGER.info("统计键已设置为: " + key.getKey().getDisplayName().getString() + 
+                               " (键值:" + key.getKey().getValue() + ")");
+                }
+                if (key.getName().equals("key.advancedskills.specialty")) {
+                    specialtyKeyFound = true;
+                    LOGGER.info("专精键已设置为: " + key.getKey().getDisplayName().getString() + 
+                               " (键值:" + key.getKey().getValue() + ")");
+                }
+            }
+            LOGGER.info("======================");
+            
+            // 热键没有正确注册的警告
+            if (!elementKeyFound) {
+                LOGGER.error("元素切换键未正确注册! 请删除options.txt并重启游戏");
+            }
+            if (!statsKeyFound) {
+                LOGGER.error("统计键未正确注册! 请删除options.txt并重启游戏");
+            }
+            if (!specialtyKeyFound) {
+                LOGGER.error("专精键未正确注册! 请删除options.txt并重启游戏");
+            }
+            
+            // 重新保存我们的元素切换按键为G键
+            if (elementKeyMapping != null) {
+                LOGGER.info("当前元素切换键设置为: " + 
+                           elementKeyMapping.getKey().getDisplayName().getString() + 
+                           " (键值:" + elementKeyMapping.getKey().getValue() + ")");
+                
+                // 如果不是G键，尝试强制设置为G键
+                if (elementKeyMapping.getKey().getValue() != GLFW.GLFW_KEY_G) {
+                    try {
+                        LOGGER.warn("尝试强制更新元素切换键为G键...");
+                        elementKeyMapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_G));
+                        LOGGER.info("元素切换键已强制更新为G键");
+                    } catch (Exception e) {
+                        LOGGER.error("无法强制更新元素切换键: " + e.getMessage(), e);
+                    }
+                }
+            } else {
+                LOGGER.error("elementKeyMapping为null，无法检查或更新");
+            }
+        });
+        
+        LOGGER.info("==== 初始化客户端UI与热键 - 完成 ====");
     }
     
     /**
      * 注册按键绑定
      */
     private void registerKeyBindings(final RegisterKeyMappingsEvent event) {
-        LOGGER.info("注册按键绑定");
-        statsKeyMapping = new KeyMapping(
-            "key.advancedskills.stats", // 键位名称
-            GLFW.GLFW_KEY_K,           // 默认键位（K键）
-            "key.categories.advancedskills" // 键位分类
-        );
-        event.register(statsKeyMapping);
+        LOGGER.info("==== 高级技能 Mod 注册按键绑定开始 ====");
         
-        // 注册元素切换按键
-        elementKeyMapping = new KeyMapping(
-            "key.advancedskills.element", // 键位名称
-            GLFW.GLFW_KEY_V,             // 默认键位（V键）
-            "key.categories.advancedskills" // 键位分类
-        );
-        event.register(elementKeyMapping);
+        // 清除任何可能存在的旧热键实例
+        if (statsKeyMapping != null) {
+            LOGGER.info("清除旧的统计键实例");
+            statsKeyMapping = null;
+        }
+        if (elementKeyMapping != null) {
+            LOGGER.info("清除旧的元素切换键实例");
+            elementKeyMapping = null;
+        }
+        if (specialtyKeyMapping != null) {
+            LOGGER.info("清除旧的专精键实例");
+            specialtyKeyMapping = null;
+        }
         
-        // 注册专精切换按键
-        specialtyKeyMapping = new KeyMapping(
-            "key.advancedskills.specialty", // 键位名称
-            GLFW.GLFW_KEY_M,                 // 默认键位（M键）
-            "key.categories.advancedskills"   // 键位分类
-        );
-        event.register(specialtyKeyMapping);
+        // 创建并注册统计热键
+        try {
+            statsKeyMapping = new KeyMapping(
+                "key.advancedskills.stats", // 键位名称
+                GLFW.GLFW_KEY_K,           // 默认键位（K键）
+                "key.categories.advancedskills" // 键位分类
+            );
+            event.register(statsKeyMapping);
+            LOGGER.info("【注册成功】统计键: K");
+        } catch (Exception e) {
+            LOGGER.error("注册统计键失败: " + e.getMessage());
+        }
+        
+        // 创建并注册元素切换热键 - 使用G键而不是V键
+        try {
+            elementKeyMapping = new KeyMapping(
+                "key.advancedskills.element", // 键位名称
+                GLFW.GLFW_KEY_G,             // 默认键位（G键，避免冲突）
+                "key.categories.advancedskills" // 键位分类
+            );
+            event.register(elementKeyMapping);
+            LOGGER.info("【注册成功】元素切换键: G (原计划V键可能有冲突)");
+        } catch (Exception e) {
+            LOGGER.error("注册元素切换键失败: " + e.getMessage());
+        }
+        
+        // 创建并注册专精切换热键
+        try {
+            specialtyKeyMapping = new KeyMapping(
+                "key.advancedskills.specialty", // 键位名称
+                GLFW.GLFW_KEY_M,                // 默认键位（M键）
+                "key.categories.advancedskills"  // 键位分类
+            );
+            event.register(specialtyKeyMapping);
+            LOGGER.info("【注册成功】专精键: M");
+        } catch (Exception e) {
+            LOGGER.error("注册专精键失败: " + e.getMessage());
+        }
+        
+        LOGGER.info("==== 高级技能 Mod 按键绑定注册完成 ====");
     }
     
     /**
@@ -344,11 +465,53 @@ public class AdvancedSkillsMod {
      */
     @SubscribeEvent
     public void onKeyInput(InputEvent.Key event) {
-        if (Minecraft.getInstance().player != null && statsKeyMapping.consumeClick()) {
+        // 获取当前玩家实例
+        Player player = Minecraft.getInstance().player;
+        if (player == null) {
+            return;
+        }
+        
+        // 记录当前按下的键
+        int key = event.getKey();
+        int scanCode = event.getScanCode();
+        int action = event.getAction();
+        int modifiers = event.getModifiers();
+        
+        // 只处理按下动作(action == 1)，避免重复触发
+        if (action == 1) {
+            LOGGER.debug("键盘输入: key=" + key + 
+                       ", scanCode=" + scanCode + 
+                       ", action=" + action + 
+                       ", modifiers=" + modifiers);
+            
+            // 直接检查是否是G键 (GLFW_KEY_G = 71)
+            if (key == GLFW.GLFW_KEY_G) {
+                LOGGER.info("直接检测到G键(71)按下，切换元素类型");
+                cycleElementType(player);
+                return;
+            }
+            
+            // 兼容老版本的L键检测，可以在修复后移除这部分
+            if (key == GLFW.GLFW_KEY_L) {
+                LOGGER.info("检测到L键(76)按下 - 兼容老版本，切换元素类型");
+                cycleElementType(player);
+                return;
+            }
+        }
+        
+        // 通过KeyMapping检测按键，作为备用方案
+        if (elementKeyMapping != null && elementKeyMapping.isDown()) {
+            LOGGER.info("通过KeyMapping检测到元素切换键按下: " + 
+                       elementKeyMapping.getKey().getDisplayName().getString() + 
+                       " (键值:" + elementKeyMapping.getKey().getValue() + ")");
+            cycleElementType(player);
+        }
+        
+        if (statsKeyMapping != null && statsKeyMapping.isDown()) {
+            LOGGER.info("检测到统计键按下");
             // 切换显示状态
             showStatsInfo = !showStatsInfo;
             
-            Player player = Minecraft.getInstance().player;
             if (showStatsInfo) {
                 // 显示技能统计信息
                 displaySkillStats(player);
@@ -358,12 +521,9 @@ public class AdvancedSkillsMod {
             }
         }
         
-        if (Minecraft.getInstance().player != null && elementKeyMapping.consumeClick()) {
-            cycleElementType(Minecraft.getInstance().player);
-        }
-        
-        if (Minecraft.getInstance().player != null && specialtyKeyMapping.consumeClick()) {
-            cycleWeaponSpecialty(Minecraft.getInstance().player);
+        if (specialtyKeyMapping != null && specialtyKeyMapping.isDown()) {
+            LOGGER.info("检测到专精键按下");
+            cycleWeaponSpecialty(player);
         }
     }
     
@@ -577,8 +737,10 @@ public class AdvancedSkillsMod {
             // 应用玩家等级属性增益
             applyPlayerLevelAttributes(player);
             
-            // 告知玩家当前等级和效果
+            // 计算玩家当前等级
             int level = calculateLevelFromXp(xp);
+            
+            // 告知玩家当前等级和效果
             player.sendSystemMessage(Component.literal("欢迎回来！你当前的等级是: " + level).withStyle(ChatFormatting.GREEN));
             
             if (elementType != ElementType.NONE) {
@@ -588,6 +750,11 @@ public class AdvancedSkillsMod {
             if (specialty != WeaponSpecialty.NONE) {
                 player.sendSystemMessage(Component.literal("当前武器专精: " + specialty.getDisplayName()).withStyle(specialty.getColor()));
             }
+            
+            // 显示新的热键提示
+            player.sendSystemMessage(Component.literal("按 K 键查看等级和统计信息").withStyle(ChatFormatting.GRAY));
+            player.sendSystemMessage(Component.literal("按 G 键切换元素类型").withStyle(ChatFormatting.GRAY));
+            player.sendSystemMessage(Component.literal("按 M 键切换武器专精").withStyle(ChatFormatting.GRAY));
         }
     }
     
@@ -901,11 +1068,16 @@ public class AdvancedSkillsMod {
                         if (random.nextFloat() < lightningChance) {
                             // 寻找范围内其他目标
                             Level level = target.level();
-                            if (level == null) break;
+                            if (level == null) {
+                                LOGGER.warn("无法获取目标所在的世界Level，无法应用闪电连锁效果");
+                                break;
+                            }
                             
+                            // 大幅降低搜索半径，防止处理过多实体导致崩溃
+                            float radius = Math.min(3.0f + (playerLevel / 50.0f), 5.0f);
                             Vec3 targetPos = target.position();
-                            float radius = LIGHTNING_CHAIN_RADIUS * (1 + (playerLevel / 100.0f)); // 随等级增加半径
                             
+                            // 创建搜索范围
                             AABB searchBox = new AABB(
                                 targetPos.x - radius, 
                                 targetPos.y - radius, 
@@ -915,44 +1087,67 @@ public class AdvancedSkillsMod {
                                 targetPos.z + radius
                             );
                             
-                            List<LivingEntity> nearbyEntities = level.getEntitiesOfClass(
-                                LivingEntity.class, 
-                                searchBox, 
-                                e -> e != target && e != player && !(e instanceof Player) && e.isAlive()
-                            );
-                            
-                            if (!nearbyEntities.isEmpty()) {
-                                // 计算连锁伤害
-                                float chainDamage = (LIGHTNING_BASE_DAMAGE + (LIGHTNING_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
+                            try {
+                                // 限制检索数量，避免处理过多实体
+                                List<LivingEntity> nearbyEntities = level.getEntitiesOfClass(
+                                    LivingEntity.class, 
+                                    searchBox, 
+                                    e -> e != target && e != player && 
+                                         e.isAlive() &&
+                                         e instanceof Monster // 只对怪物生效
+                                );
                                 
-                                // 最多连锁到3个目标，高等级可能增加
-                                int maxChain = playerLevel >= 50 ? 4 : (playerLevel >= 25 ? 3 : 2);
-                                int chainCount = Math.min(nearbyEntities.size(), maxChain);
+                                // 严格限制最大连锁数量，降低崩溃风险
+                                int maxChainAllowed = Math.min(playerLevel >= 50 ? 3 : (playerLevel >= 25 ? 2 : 1), 3);
+                                int chainCount = Math.min(nearbyEntities.size(), maxChainAllowed);
                                 
-                                for (int i = 0; i < chainCount; i++) {
-                                    try {
+                                // 如果找到了连锁目标
+                                if (chainCount > 0) {
+                                    // 计算连锁伤害
+                                    float chainDamage = (LIGHTNING_BASE_DAMAGE + (LIGHTNING_DAMAGE_PER_LEVEL * playerLevel)) * elementalBoost;
+                                    int processedCount = 0;
+                                    
+                                    for (int i = 0; i < Math.min(chainCount, nearbyEntities.size()); i++) {
                                         LivingEntity chainTarget = nearbyEntities.get(i);
-                                        if (chainTarget != null && chainTarget.isAlive()) {
+                                        // 检查目标是否有效且活着
+                                        if (chainTarget == null || !chainTarget.isAlive()) {
+                                            continue;
+                                        }
+                                        
+                                        try {
+                                            // 应用伤害
                                             chainTarget.hurt(chainTarget.damageSources().indirectMagic(player, player), chainDamage);
+                                            
+                                            // 仅显示粒子效果，不生成实际的闪电
                                             spawnElementParticles(chainTarget, elementType);
                                             
-                                            // 连接闪电特效(从主目标到次要目标)
-                                            spawnLightningEffect(target.position(), chainTarget.position());
+                                            // 记录日志
+                                            LOGGER.debug("闪电连锁影响实体: " + chainTarget.getName().getString());
+                                            
+                                            processedCount++;
+                                            if (processedCount >= maxChainAllowed) {
+                                                break; // 达到最大连锁数量，强制退出
+                                            }
+                                        } catch (Exception e) {
+                                            LOGGER.error("处理闪电连锁单个目标时出错: " + e.getMessage());
                                         }
-                                    } catch (Exception e) {
-                                        LOGGER.error("应用雷元素连锁效果时出错: " + e.getMessage());
+                                    }
+                                    
+                                    // 通知玩家
+                                    if (processedCount > 0) {
+                                        String message = String.format("【雷元素】连锁触发！命中 %d 个额外目标", processedCount);
+                                        player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
                                     }
                                 }
-                                
-                                // 通知玩家
-                                String message = String.format("【雷元素】连锁触发！命中 %d 个额外目标，每个 %.1f 点伤害", chainCount, chainDamage);
-                                player.sendSystemMessage(Component.literal(message).withStyle(ChatFormatting.YELLOW));
+                            } catch (Exception e) {
+                                LOGGER.error("处理闪电连锁搜索实体时出错: " + e.getMessage(), e);
                             }
                         }
                     } catch (Exception e) {
-                        LOGGER.error("处理雷元素效果时出错: " + e.getMessage());
+                        LOGGER.error("处理雷元素效果时出错: " + e.getMessage(), e);
                     }
                     
+                    // 无论连锁是否成功，都在原目标显示效果
                     spawnElementParticles(target, elementType);
                     LOGGER.debug("对 " + target.getName().getString() + " 应用雷元素效果");
                     break;
@@ -997,18 +1192,14 @@ public class AdvancedSkillsMod {
      * 生成元素粒子效果
      */
     private void spawnElementParticles(LivingEntity entity, ElementType elementType) {
-        // 现实中在服务端无法生成客户端粒子效果，这里仅作为示例代码
-        // 实际中应该通过数据包发送到客户端，让客户端生成粒子
-        LOGGER.debug("为 " + entity.getName().getString() + " 生成 " + elementType.getDisplayName() + " 元素粒子效果");
-    }
-    
-    /**
-     * 生成连接两点的闪电特效
-     */
-    private void spawnLightningEffect(Vec3 start, Vec3 end) {
-        // 实际需要向客户端发送数据包生成特效
-        // 这里只是日志记录
-        LOGGER.debug("生成从 " + start + " 到 " + end + " 的闪电连接特效");
+        // 安全检查
+        if (entity == null || entity.level() == null) return;
+        
+        // 只在客户端执行效果
+        if (entity.level().isClientSide()) {
+            // 记录粒子效果请求，实际不生成粒子以避免崩溃
+            LOGGER.debug("为 " + entity.getName().getString() + " 生成 " + elementType.getDisplayName() + " 元素粒子效果");
+        }
     }
 
     /**
@@ -1952,7 +2143,7 @@ public class AdvancedSkillsMod {
                     ElementType newElementType = ElementType.fromLevel(currentLevel);
                     if (newElementType != ElementType.NONE && newElementType != ElementType.fromLevel(lastAppliedLevel)) {
                         player.sendSystemMessage(Component.literal("你解锁了新的元素类型: " + newElementType.getDisplayName() + "！").withStyle(newElementType.getColor()));
-                        player.sendSystemMessage(Component.literal("按 V 键切换元素类型").withStyle(ChatFormatting.GRAY));
+                        player.sendSystemMessage(Component.literal("按 G 键切换元素类型").withStyle(ChatFormatting.GRAY));
                     }
                 }
             }
