@@ -188,7 +188,7 @@ public class AdvancedSkillsMod {
     
     private static final float LIGHTNING_BASE_CHANCE = 0.2F; // 20%基础连锁几率
     private static final float LIGHTNING_CHANCE_PER_LEVEL = 0.012F; // 每级增加1.2%几率
-    private static final float LIGHTNING_CHAIN_RADIUS = 5.0F; // 5格连锁半径
+    private static final float LIGHTNING_CHAIN_RADIUS = 20.0F; // 5格连锁半径
     private static final float LIGHTNING_BASE_DAMAGE = 3.0F; // 3点基础连锁伤害
     private static final float LIGHTNING_DAMAGE_PER_LEVEL = 0.3F; // 每级增加0.3点连锁伤害
     
@@ -488,13 +488,6 @@ public class AdvancedSkillsMod {
             // 直接检查是否是G键 (GLFW_KEY_G = 71)
             if (key == GLFW.GLFW_KEY_G) {
                 LOGGER.info("直接检测到G键(71)按下，切换元素类型");
-                cycleElementType(player);
-                return;
-            }
-            
-            // 兼容老版本的L键检测，可以在修复后移除这部分
-            if (key == GLFW.GLFW_KEY_L) {
-                LOGGER.info("检测到L键(76)按下 - 兼容老版本，切换元素类型");
                 cycleElementType(player);
                 return;
             }
