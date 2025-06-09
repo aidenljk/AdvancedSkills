@@ -5,6 +5,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import com.advancedskills.skills.ISkill; // Added import
+import net.minecraft.ChatFormatting; // Added import
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,9 +26,8 @@ public class KeyInputHandler {
     // 保存当前屏幕实例
     private KillStatsScreen statsScreen = null;
     
-    public KeyInputHandler() {
-        // 获取mod实例
-        this.mod = AdvancedSkillsMod.getInstance();
+    public KeyInputHandler(AdvancedSkillsMod mod) {
+        this.mod = mod;
     }
     
     /**
@@ -75,25 +76,43 @@ public class KeyInputHandler {
             mod.cycleWeaponSpecialty(player);
             return;
         }
-    }
-    
-    /**
-     * 处理鼠标点击事件
-     */
-    @SubscribeEvent
-    public void onMouseInput(InputEvent.MouseButton event) {
-        // 只处理按下动作
-        if (event.getAction() != GLFW.GLFW_PRESS) {
-            return;
+
+        // Check for Active Skill 1 Key (R by default)
+        if (AdvancedSkillsMod.activeSkill1KeyMapping.matches(event.getKey(), event.getScanCode())) {
+            AdvancedSkillsMod modInstance = AdvancedSkillsMod.getInstance();
+            if (modInstance != null && modInstance.playerStatsManager != null && modInstance.combatManager != null && modInstance.mobStatsManager != null) {
+                ISkill skillToUse = AdvancedSkillsMod.ELEMENTAL_BLAST_SKILL; // Get the skill
+
+                if (modInstance.playerStatsManager.isSkillReady(player.getUUID(), skillToUse.getSkillId(), skillToUse.getCooldownTicks(), player.level().getGameTime())) {
+                    LOGGER.info("Executing skill: {} for player {}", skillToUse.getDisplayName(), player.getName().getString());
+                    skillToUse.execute(player, modInstance.playerStatsManager, modInstance.combatManager, modInstance.mobStatsManager);
+                    // Skill's execute method should set cooldown via playerStatsManager
+                } else {
+                    long remaining = modInstance.playerStatsManager.getRemainingCooldownTicks(player.getUUID(), skillToUse.getSkillId(), skillToUse.getCooldownTicks(), player.level().getGameTime());
+                    player.sendSystemMessage(Component.literal(skillToUse.getDisplayName() + " is on cooldown for " + String.format("%.1f", remaining / 20.0) + "s.").withStyle(ChatFormatting.RED));
+                }
+            }
+            return; // Consume the event
         }
-        
-        // 获取当前玩家
-        Player player = Minecraft.getInstance().player;
-        if (player == null) {
-            return;
+
+        // Check for Active Skill 2 Key (F by default)
+        if (AdvancedSkillsMod.activeSkill2KeyMapping.matches(event.getKey(), event.getScanCode())) {
+            AdvancedSkillsMod modInstance = AdvancedSkillsMod.getInstance();
+            // Player player is already defined and checked for null at the beginning of the method
+
+            if (modInstance != null && modInstance.playerStatsManager != null && modInstance.combatManager != null && modInstance.mobStatsManager != null) {
+                ISkill skillToUse = AdvancedSkillsMod.DEFENSIVE_STANCE_SKILL;
+
+                if (modInstance.playerStatsManager.isSkillReady(player.getUUID(), skillToUse.getSkillId(), skillToUse.getCooldownTicks(), player.level().getGameTime())) {
+                    LOGGER.info("Executing skill: {} for player {}", skillToUse.getDisplayName(), player.getName().getString());
+                    skillToUse.execute(player, modInstance.playerStatsManager, modInstance.combatManager, modInstance.mobStatsManager);
+                } else {
+                    long remaining = modInstance.playerStatsManager.getRemainingCooldownTicks(player.getUUID(), skillToUse.getSkillId(), skillToUse.getCooldownTicks(), player.level().getGameTime());
+                    player.sendSystemMessage(Component.literal(skillToUse.getDisplayName() + " is on cooldown for " + String.format("%.1f", remaining / 20.0) + "s.").withStyle(ChatFormatting.RED));
+                }
+            }
+            return; // Consume the event
         }
-        
-        // 不再需要处理UI点击，因为KillStatsScreen已经处理了
     }
     
     /**
@@ -128,14 +147,14 @@ public class KeyInputHandler {
         
         UUID playerId = player.getUUID();
         
-        // 获取玩家数据
-        int playerXp = mod.getPlayerSkillXp(playerId);
-        int playerLevel = mod.calculateLevelFromXp(playerXp);
-        AdvancedSkillsMod.ElementType elementType = mod.getPlayerElementType(playerId);
-        AdvancedSkillsMod.WeaponSpecialty specialty = mod.getPlayerWeaponSpecialty(playerId);
+        // 获取玩家数据 via PlayerStatsManager
+        int playerXp = mod.playerStatsManager.getPlayerSkillXp(playerId);
+        int playerLevel = mod.playerStatsManager.calculateLevelFromXp(playerXp);
+        AdvancedSkillsMod.ElementType elementType = mod.playerStatsManager.getPlayerElementType(playerId);
+        AdvancedSkillsMod.WeaponSpecialty specialty = mod.playerStatsManager.getPlayerWeaponSpecialty(playerId);
         
-        // 获取击杀统计
-        Map<String, Integer> stats = mod.getPlayerKillStats(playerId);
+        // 获取击杀统计 via PlayerStatsManager
+        Map<String, Integer> stats = mod.playerStatsManager.getPlayerKillStats(playerId);
         
         // 创建或更新UI数据
         if (statsScreen == null) {
