@@ -26,6 +26,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import com.advancedskills.entity.SkillProjectileEntity; // Added import
 import java.util.List;
 import java.util.Random;
 
@@ -84,24 +85,20 @@ public class ElementalBlastSkill implements ISkill {
 
     private void executeFireBlast(ServerPlayer player, ServerLevel level, int playerLevel, CombatManager combatManager) {
         Vec3 lookVec = player.getLookAngle();
-        Vec3 eyePos = player.getEyePosition();
-        float damage = 3.0F + playerLevel * 0.2F; // Example scaling
+        float damage = 4.0F + playerLevel * 0.25F; // Adjusted damage for a single projectile
 
-        for (int i = 1; i <= 4; i++) { // Check points along the cone
-            Vec3 targetPos = eyePos.add(lookVec.scale(i));
-            AABB area = new AABB(targetPos.subtract(1.5, 1.5, 1.5), targetPos.add(1.5, 1.5, 1.5));
-            List<LivingEntity> entities = level.getEntitiesOfClass(LivingEntity.class, area, e -> e != player && e.isAlive() && !(e instanceof Player));
+        // Create and spawn the projectile
+        SkillProjectileEntity fireProjectile =
+            new SkillProjectileEntity(level, player, lookVec, damage, AdvancedSkillsMod.ElementType.FIRE);
 
-            for (LivingEntity entity : entities) {
-                // Check line of sight or proximity more accurately if needed
-                entity.hurt(level.damageSources().indirectMagic(player, player), damage);
-                entity.setSecondsOnFire(3 + playerLevel / 10);
-                //combatManager.spawnElementParticles(entity, AdvancedSkillsMod.ElementType.FIRE); // Assuming this method exists
-                 level.sendParticles(ParticleTypes.FLAME, entity.getX(), entity.getY(0.5), entity.getZ(), 20, 0.5, 0.5, 0.5, 0.1);
-            }
-        }
-        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 1.0F, 1.0F);
-        player.sendSystemMessage(Component.literal("Fire Blast unleashed!").withStyle(ChatFormatting.GOLD));
+        // Optional: Add some inaccuracy or spread if desired
+        // float spread = 0.1f;
+        // fireProjectile.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0F, 1.5F, spread);
+
+        level.addFreshEntity(fireProjectile);
+
+        level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F);
+        player.sendSystemMessage(Component.literal("Fire Bolt unleashed!").withStyle(ChatFormatting.GOLD));
     }
 
     private void executeIceBlast(ServerPlayer player, ServerLevel level, int playerLevel, CombatManager combatManager) {

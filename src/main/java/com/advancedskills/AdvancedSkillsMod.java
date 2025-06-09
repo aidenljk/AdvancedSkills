@@ -231,6 +231,7 @@ public class AdvancedSkillsMod {
         // Register KeyInputHandler and KeyMappings
         modEventBus.addListener(this::registerKeyBindings); // Make sure this is listening on the MOD bus
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler(this)); // Pass instance if needed, or rely on static access
+        com.advancedskills.init.ModEntityTypes.register(modEventBus); // Added EntityType registration
         
         LOGGER.info("注册热键：切换元素类型(G)，显示统计信息(K)，切换武器专精(L)");
         // The onKeyInput method from AdvancedSkillsMod is removed as per refactoring plan.
