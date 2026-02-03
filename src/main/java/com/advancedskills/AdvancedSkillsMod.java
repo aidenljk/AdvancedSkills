@@ -613,7 +613,13 @@ public class AdvancedSkillsMod {
         CompoundTag persistentData = player.getPersistentData();
         if (persistentData.contains(ELEMENT_TYPE_KEY)) {
             int ordinal = persistentData.getInt(ELEMENT_TYPE_KEY);
-            return ElementType.values()[ordinal];
+            ElementType[] values = ElementType.values();
+            if (ordinal < 0 || ordinal >= values.length) {
+                LOGGER.warn("检测到非法元素类型序号 {}，已回退为 NONE。", ordinal);
+                persistentData.putInt(ELEMENT_TYPE_KEY, ElementType.NONE.ordinal());
+                return ElementType.NONE;
+            }
+            return values[ordinal];
         }
         return ElementType.NONE;
     }
@@ -1267,7 +1273,13 @@ public class AdvancedSkillsMod {
         CompoundTag persistentData = player.getPersistentData();
         if (persistentData.contains(WEAPON_SPECIALTY_KEY)) {
             int ordinal = persistentData.getInt(WEAPON_SPECIALTY_KEY);
-            return WeaponSpecialty.values()[ordinal];
+            WeaponSpecialty[] values = WeaponSpecialty.values();
+            if (ordinal < 0 || ordinal >= values.length) {
+                LOGGER.warn("检测到非法武器专精序号 {}，已回退为 NONE。", ordinal);
+                persistentData.putInt(WEAPON_SPECIALTY_KEY, WeaponSpecialty.NONE.ordinal());
+                return WeaponSpecialty.NONE;
+            }
+            return values[ordinal];
         }
         return WeaponSpecialty.NONE;
     }
