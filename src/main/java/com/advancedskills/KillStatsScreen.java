@@ -32,7 +32,7 @@ public class KillStatsScreen extends Screen {
     
     // UI尺寸和位置
     private int uiWidth = 200;
-    private int uiHeight = 150;
+    private int uiHeight = 190;
     private int x;
     private int y;
     
@@ -94,25 +94,44 @@ public class KillStatsScreen extends Screen {
         String levelText = "等级: " + playerLevel;
         guiGraphics.drawString(font, levelText, x + 10, y + 30, 0xFFFF00);
         
-        // 玩家经验
-        String xpText = "经验: " + playerXp;
+        int currentLevelTotalXp = AdvancedSkillsMod.getTotalXpForLevel(playerLevel);
+        int nextLevelTotalXp = AdvancedSkillsMod.getTotalXpForLevel(playerLevel + 1);
+        int levelProgress = Math.max(0, playerXp - currentLevelTotalXp);
+        int levelTotalNeeded = Math.max(1, nextLevelTotalXp - currentLevelTotalXp);
+
+        // 玩家经验（当前等级进度）
+        String xpText = "经验: " + levelProgress + "/" + levelTotalNeeded;
         guiGraphics.drawString(font, xpText, x + 10, y + 45, 0xFFFF00);
+
+        // 经验进度条
+        int barX = x + 10;
+        int barY = y + 57;
+        int barWidth = uiWidth - 20;
+        int barHeight = 8;
+        float progressRatio = Math.min(1.0f, levelProgress / (float) levelTotalNeeded);
+        int filledWidth = Math.round(barWidth * progressRatio);
+        guiGraphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF333333);
+        guiGraphics.fill(barX, barY, barX + filledWidth, barY + barHeight, 0xFF66CC66);
+
+        // 下一解锁提示
+        String nextUnlockText = AdvancedSkillsMod.getNextUnlockHint(playerLevel);
+        guiGraphics.drawString(font, nextUnlockText, x + 10, y + 70, 0xFFFFFF);
         
         // 元素类型
         String elementText = "元素: " + elementType.getDisplayName();
         int elementColor = elementType.getColor().getColor();
-        guiGraphics.drawString(font, elementText, x + 10, y + 60, elementColor);
+        guiGraphics.drawString(font, elementText, x + 10, y + 85, elementColor);
         
         // 武器专精
         String specialtyText = "专精: " + weaponSpecialty.getDisplayName();
         int specialtyColor = weaponSpecialty.getColor().getColor();
-        guiGraphics.drawString(font, specialtyText, x + 10, y + 75, specialtyColor);
+        guiGraphics.drawString(font, specialtyText, x + 10, y + 100, specialtyColor);
         
         // 击杀统计标题
-        guiGraphics.drawString(font, "击杀统计:", x + 10, y + 95, 0xFFFFFF);
+        guiGraphics.drawString(font, "击杀统计:", x + 10, y + 120, 0xFFFFFF);
         
         // 显示击杀统计
-        int yOffset = 110;
+        int yOffset = 135;
         if (killStats != null && !killStats.isEmpty()) {
             for (Map.Entry<String, Integer> entry : killStats.entrySet()) {
                 String statText = entry.getKey() + ": " + entry.getValue();

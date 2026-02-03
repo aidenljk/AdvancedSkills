@@ -1867,9 +1867,35 @@ public class AdvancedSkillsMod {
     /**
      * 获取指定等级所需的经验总量
      */
-    private int calculateXpForLevel(int level) {
+    private static int calculateXpForLevel(int level) {
         // 采用平方关系：等级^2 * 1（原来是 * 100，现在降低100倍）
         return level * level;
+    }
+
+    /**
+     * 获取指定等级所需的经验总量（对外公开）
+     */
+    public static int getTotalXpForLevel(int level) {
+        return calculateXpForLevel(Math.max(0, level));
+    }
+
+    /**
+     * 获取下一个等级解锁提示
+     */
+    public static String getNextUnlockHint(int level) {
+        if (level < 10) {
+            return "下一解锁: 10级 火元素";
+        }
+        if (level < 25) {
+            return "下一解锁: 25级 冰元素";
+        }
+        if (level < 40) {
+            return "下一解锁: 40级 雷元素";
+        }
+        if (level < 55) {
+            return "下一解锁: 55级 毒元素";
+        }
+        return "已解锁所有元素";
     }
     
     /**
