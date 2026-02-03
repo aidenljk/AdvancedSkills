@@ -125,6 +125,10 @@ public class KeyInputHandler {
         if (!player.level().isClientSide()) {
             return;
         }
+
+        if (!mod.ensureClientSkillData(player)) {
+            return;
+        }
         
         UUID playerId = player.getUUID();
         
