@@ -42,8 +42,14 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.network.SimpleChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +70,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.network.FriendlyByteBuf;
 
 @Mod(AdvancedSkillsMod.MODID)
 public class AdvancedSkillsMod {
@@ -78,6 +85,20 @@ public class AdvancedSkillsMod {
     
     // 玩家技能经验数据
     private final Map<UUID, Integer> playerSkillXp = new HashMap<>();
+
+    private static final String NETWORK_PROTOCOL_VERSION = "1";
+    private static final SimpleChannel NETWORK_CHANNEL = NetworkRegistry.newSimpleChannel(
+        new ResourceLocation(MODID, "skillsync"),
+        () -> NETWORK_PROTOCOL_VERSION,
+        NETWORK_PROTOCOL_VERSION::equals,
+        NETWORK_PROTOCOL_VERSION::equals
+    );
+    private static int packetId = 0;
+
+    private static final long CLIENT_SYNC_STALE_MS = 5000L;
+    private static final long CLIENT_SYNC_REQUEST_COOLDOWN_MS = 1000L;
+    private final Map<UUID, Long> clientLastSyncTimes = new HashMap<>();
+    private final Map<UUID, Long> clientLastSyncRequests = new HashMap<>();
     
     // 弓箭伤害系数
     private static final float BASE_EXTRA_ARROW_DAMAGE = 0.5F; // 初始0.5点额外伤害
@@ -306,6 +327,7 @@ public class AdvancedSkillsMod {
         MinecraftForge.EVENT_BUS.register(this);
         
         // 注册客户端设置和按键绑定监听器
+        modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::clientSetup);
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         
@@ -397,6 +419,28 @@ public class AdvancedSkillsMod {
         });
         
         LOGGER.info("==== 初始化客户端UI与热键 - 完成 ====");
+    }
+
+    /**
+     * 通用设置（注册网络包）
+     */
+    private void commonSetup(final FMLCommonSetupEvent event) {
+        event.enqueueWork(() -> {
+            NETWORK_CHANNEL.registerMessage(
+                packetId++,
+                SkillSyncPacket.class,
+                SkillSyncPacket::encode,
+                SkillSyncPacket::decode,
+                SkillSyncPacket::handle
+            );
+            NETWORK_CHANNEL.registerMessage(
+                packetId++,
+                SkillSyncRequestPacket.class,
+                SkillSyncRequestPacket::encode,
+                SkillSyncRequestPacket::decode,
+                SkillSyncRequestPacket::handle
+            );
+        });
     }
     
     /**
@@ -527,6 +571,10 @@ public class AdvancedSkillsMod {
     private void updateStatsDisplay(Player player) {
         // 只在客户端执行
         if (!player.level().isClientSide()) {
+            return;
+        }
+
+        if (!ensureClientSkillData(player)) {
             return;
         }
         
@@ -694,6 +742,8 @@ public class AdvancedSkillsMod {
             player.sendSystemMessage(Component.literal("按 K 键查看等级和统计信息").withStyle(ChatFormatting.GRAY));
             player.sendSystemMessage(Component.literal("按 G 键切换元素类型").withStyle(ChatFormatting.GRAY));
             player.sendSystemMessage(Component.literal("按 M 键切换武器专精").withStyle(ChatFormatting.GRAY));
+
+            sendSkillDataToClient(serverPlayer);
         }
     }
     
@@ -811,6 +861,8 @@ public class AdvancedSkillsMod {
                 // 播放等级提升音效
                 player.playSound(SoundEvents.PLAYER_LEVELUP, 1.0F, 1.0F);
             }
+
+            sendSkillDataToClient((ServerPlayer) player);
         }
         
         LOGGER.debug("玩家 " + player.getName().getString() + " 获得 " + xpAmount + 
@@ -848,6 +900,7 @@ public class AdvancedSkillsMod {
         // 如果是服务器玩家，保存统计数据
         if (player instanceof ServerPlayer) {
             saveKillStats((ServerPlayer)player, killStats);
+            sendSkillDataToClient((ServerPlayer) player);
         }
     }
     
@@ -2504,4 +2557,130 @@ public class AdvancedSkillsMod {
     public Map<String, Integer> getPlayerKillStats(UUID playerId) {
         return playerKillStats.getOrDefault(playerId, new HashMap<>());
     }
-} 
+
+    public boolean ensureClientSkillData(Player player) {
+        if (!player.level().isClientSide()) {
+            return true;
+        }
+
+        UUID playerId = player.getUUID();
+        long now = System.currentTimeMillis();
+        Long lastSync = clientLastSyncTimes.get(playerId);
+        if (lastSync != null && now - lastSync <= CLIENT_SYNC_STALE_MS) {
+            return true;
+        }
+
+        requestSkillDataSync(player);
+        player.sendSystemMessage(Component.literal("正在同步技能数据...").withStyle(ChatFormatting.GRAY));
+        return false;
+    }
+
+    public void requestSkillDataSync(Player player) {
+        if (!player.level().isClientSide()) {
+            return;
+        }
+
+        UUID playerId = player.getUUID();
+        long now = System.currentTimeMillis();
+        Long lastRequest = clientLastSyncRequests.get(playerId);
+        if (lastRequest != null && now - lastRequest < CLIENT_SYNC_REQUEST_COOLDOWN_MS) {
+            return;
+        }
+
+        clientLastSyncRequests.put(playerId, now);
+        NETWORK_CHANNEL.sendToServer(new SkillSyncRequestPacket());
+    }
+
+    private void sendSkillDataToClient(ServerPlayer player) {
+        UUID playerId = player.getUUID();
+        int xp = playerSkillXp.getOrDefault(playerId, loadPlayerSkillXp(player));
+        ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
+        WeaponSpecialty specialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
+        Map<String, Integer> stats = playerKillStats.getOrDefault(playerId, new HashMap<>());
+        SkillSyncPacket packet = new SkillSyncPacket(playerId, xp, elementType, specialty, stats);
+        NETWORK_CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+    }
+
+    private void applyClientSkillData(SkillSyncPacket packet) {
+        UUID playerId = packet.playerId;
+        playerSkillXp.put(playerId, packet.playerXp);
+        playerElementTypes.put(playerId, packet.elementType);
+        playerWeaponSpecialties.put(playerId, packet.weaponSpecialty);
+        playerKillStats.put(playerId, new HashMap<>(packet.killStats));
+        clientLastSyncTimes.put(playerId, System.currentTimeMillis());
+    }
+
+    private static class SkillSyncPacket {
+        private final UUID playerId;
+        private final int playerXp;
+        private final ElementType elementType;
+        private final WeaponSpecialty weaponSpecialty;
+        private final Map<String, Integer> killStats;
+
+        private SkillSyncPacket(UUID playerId, int playerXp, ElementType elementType, WeaponSpecialty weaponSpecialty,
+                                Map<String, Integer> killStats) {
+            this.playerId = playerId;
+            this.playerXp = playerXp;
+            this.elementType = elementType;
+            this.weaponSpecialty = weaponSpecialty;
+            this.killStats = killStats;
+        }
+
+        private static void encode(SkillSyncPacket packet, FriendlyByteBuf buf) {
+            buf.writeUUID(packet.playerId);
+            buf.writeVarInt(packet.playerXp);
+            buf.writeVarInt(packet.elementType.ordinal());
+            buf.writeVarInt(packet.weaponSpecialty.ordinal());
+            buf.writeVarInt(packet.killStats.size());
+            for (Map.Entry<String, Integer> entry : packet.killStats.entrySet()) {
+                buf.writeUtf(entry.getKey());
+                buf.writeVarInt(entry.getValue());
+            }
+        }
+
+        private static SkillSyncPacket decode(FriendlyByteBuf buf) {
+            UUID playerId = buf.readUUID();
+            int playerXp = buf.readVarInt();
+            ElementType elementType = ElementType.values()[buf.readVarInt()];
+            WeaponSpecialty specialty = WeaponSpecialty.values()[buf.readVarInt()];
+            int size = buf.readVarInt();
+            Map<String, Integer> stats = new HashMap<>();
+            for (int i = 0; i < size; i++) {
+                stats.put(buf.readUtf(), buf.readVarInt());
+            }
+            return new SkillSyncPacket(playerId, playerXp, elementType, specialty, stats);
+        }
+
+        private static void handle(SkillSyncPacket packet, NetworkEvent.Context context) {
+            context.enqueueWork(() -> {
+                if (context.getDirection() == NetworkDirection.PLAY_TO_CLIENT) {
+                    AdvancedSkillsMod mod = AdvancedSkillsMod.getInstance();
+                    mod.applyClientSkillData(packet);
+                }
+            });
+            context.setPacketHandled(true);
+        }
+    }
+
+    private static class SkillSyncRequestPacket {
+        private static void encode(SkillSyncRequestPacket packet, FriendlyByteBuf buf) {
+        }
+
+        private static SkillSyncRequestPacket decode(FriendlyByteBuf buf) {
+            return new SkillSyncRequestPacket();
+        }
+
+        private static void handle(SkillSyncRequestPacket packet, NetworkEvent.Context context) {
+            context.enqueueWork(() -> {
+                if (context.getDirection() == NetworkDirection.PLAY_TO_SERVER) {
+                    ServerPlayer player = context.getSender();
+                    if (player != null) {
+                        AdvancedSkillsMod mod = AdvancedSkillsMod.getInstance();
+                        mod.sendSkillDataToClient(player);
+                    }
+                }
+            });
+            context.setPacketHandled(true);
+        }
+    }
+}
