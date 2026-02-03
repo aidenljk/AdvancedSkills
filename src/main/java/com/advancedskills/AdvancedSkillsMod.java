@@ -27,7 +27,6 @@ import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -289,9 +288,6 @@ public class AdvancedSkillsMod {
     // 专精切换按键
     private static KeyMapping specialtyKeyMapping;
 
-    // 显示统计信息标志
-    private static boolean showStatsInfo = false;
-
     private Minecraft client;
 
     public AdvancedSkillsMod() {
@@ -309,7 +305,7 @@ public class AdvancedSkillsMod {
         modEventBus.addListener(this::clientSetup);
         MinecraftForge.EVENT_BUS.register(new KeyInputHandler());
         
-        LOGGER.info("注册热键：切换元素类型(G)，显示统计信息(K)，切换武器专精(L)");
+        LOGGER.info("注册热键：切换元素类型(G)，显示统计信息(K)，切换武器专精(M)");
     }
     
     /**
@@ -459,92 +455,6 @@ public class AdvancedSkillsMod {
         }
         
         LOGGER.info("==== 高级技能 Mod 按键绑定注册完成 ====");
-    }
-    
-    /**
-     * 监听键盘输入事件
-     */
-    @SubscribeEvent
-    public void onKeyInput(InputEvent.Key event) {
-        // 获取当前玩家实例
-        Player player = Minecraft.getInstance().player;
-        if (player == null) {
-            return;
-        }
-        
-        // 记录当前按下的键
-        int key = event.getKey();
-        int scanCode = event.getScanCode();
-        int action = event.getAction();
-        int modifiers = event.getModifiers();
-        
-        // 只处理按下动作(action == 1)，避免重复触发
-        if (action == 1) {
-            LOGGER.debug("键盘输入: key=" + key + 
-                       ", scanCode=" + scanCode + 
-                       ", action=" + action + 
-                       ", modifiers=" + modifiers);
-            
-            // 直接检查是否是G键 (GLFW_KEY_G = 71)
-            if (key == GLFW.GLFW_KEY_G) {
-                LOGGER.info("直接检测到G键(71)按下，切换元素类型");
-                cycleElementType(player);
-                return;
-            }
-        }
-        
-        // 通过KeyMapping检测按键，作为备用方案
-        if (elementKeyMapping != null && elementKeyMapping.isDown()) {
-            LOGGER.info("通过KeyMapping检测到元素切换键按下: " + 
-                       elementKeyMapping.getKey().getDisplayName().getString() + 
-                       " (键值:" + elementKeyMapping.getKey().getValue() + ")");
-            cycleElementType(player);
-        }
-        
-        if (statsKeyMapping != null && statsKeyMapping.isDown()) {
-            LOGGER.info("检测到统计键按下");
-            // 切换显示状态
-            showStatsInfo = !showStatsInfo;
-            
-            if (showStatsInfo) {
-                // 使用UI方式显示技能统计信息
-                updateStatsDisplay(player);
-            } else {
-                // 显示隐藏消息
-                player.sendSystemMessage(Component.literal("技能统计信息已隐藏").withStyle(ChatFormatting.GRAY));
-            }
-        }
-        
-        if (specialtyKeyMapping != null && specialtyKeyMapping.isDown()) {
-            LOGGER.info("检测到专精键按下");
-            cycleWeaponSpecialty(player);
-        }
-    }
-    
-    /**
-     * 更新并显示统计UI
-     */
-    private void updateStatsDisplay(Player player) {
-        // 只在客户端执行
-        if (!player.level().isClientSide()) {
-            return;
-        }
-        
-        UUID playerId = player.getUUID();
-        
-        // 获取玩家数据
-        int playerXp = playerSkillXp.getOrDefault(playerId, 0);
-        int playerLevel = calculateLevelFromXp(playerXp);
-        ElementType elementType = playerElementTypes.getOrDefault(playerId, ElementType.NONE);
-        WeaponSpecialty specialty = playerWeaponSpecialties.getOrDefault(playerId, WeaponSpecialty.NONE);
-        
-        // 获取击杀统计
-        Map<String, Integer> stats = playerKillStats.getOrDefault(playerId, new HashMap<>());
-        
-        // 创建并显示统计屏幕
-        KillStatsScreen statsScreen = new KillStatsScreen();
-        statsScreen.updateStats(playerLevel, playerXp, stats, elementType, specialty);
-        Minecraft.getInstance().setScreen(statsScreen);
     }
     
     /**

@@ -1,12 +1,10 @@
 package com.advancedskills;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -58,13 +56,6 @@ public class KeyInputHandler {
         // 检测G键 - 切换元素类型
         if (key == GLFW.GLFW_KEY_G) {
             LOGGER.info("检测到G键按下 - 切换元素类型");
-            mod.cycleElementType(player);
-            return;
-        }
-        
-        // 检测L键(用于兼容) - 切换元素类型
-        if (key == GLFW.GLFW_KEY_L) {
-            LOGGER.info("检测到L键按下(兼容模式) - 切换元素类型");
             mod.cycleElementType(player);
             return;
         }
